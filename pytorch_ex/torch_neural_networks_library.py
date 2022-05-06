@@ -257,40 +257,47 @@ class Bottleneck(nn.Module):
 class ResNet(nn.Module):
     def __init__(self, block, layers):
         super().__init__()
+
+        ### 28 -> 28
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=1, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
         ### 28 -> 14
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=2, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(16)
-        self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(block, 16, 32, layers[0])
+        self.layer1 = self._make_layer(block, 32, 64, layers[0], stride=2)
+        ### 14 -> 14
+        self.layer2 = self._make_layer(block, 64, 128, layers[1])
         ### 14 -> 7
-        self.layer2 = self._make_layer(block, 32, 64, layers[1], stride=2)
-        ### 7 -> 4
-        self.layer3 = self._make_layer(block, 64, 128, layers[2], stride=2)
-        ### 4 -> 1
-        self.avgpool = nn.AvgPool2d(4, stride=1)
+        self.layer3 = self._make_layer(block, 128, 128, layers[2], stride=2)
+        ### 7 -> 2
+        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
+        self.relu = nn.ReLU(inplace=True)
         self.flatten = nn.Flatten()
-        self.drop = nn.Dropout(0.3)
-        self.linear = nn.Linear(128, 10)
+        self.linear = nn.Linear(512, 10)
 
         ### initialization
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 ### siccome il training è solo dei batchnorm layer provare anche altre inizializzazioni..
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                #nn.init.kaiming_uniform_(m.weight, mode='fan_out', nonlinearity='relu')
+                #nn.init.xavier_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 #nn.init.kaiming_uniform_(m.weight, mode='fan_out', nonlinearity='relu')
                 #nn.init.xavier_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+            
 
     def _make_layer(self, block, inplanes, planes, blocks, stride=1):
         downsample = None
         if stride != 1 :
             downsample = nn.Sequential(
-                nn.Conv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes),
-            )
-        else:
+                    nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+                )
+            if inplanes != planes:
+                downsample.append(concatLayer())
+        elif inplanes != planes:
             downsample = concatLayer()
 
         layers = []
@@ -313,28 +320,27 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-
+        
         x = self.avgpool(x)
         x = self.flatten(x)
-        x = self.drop(x)
         x = self.linear(x)
 
         return x
 
 ### resnet model with bottleneck:
-#   - 19 conv layers
-#   - 19 bn layers
+#   - 20 conv layers
+#   - 20 bn layers
 #   - 1 fc
 def isaResnet_20():
-    model = ResNet(Bottleneck, [2, 2, 2])
+    model = ResNet(Bottleneck, [2, 1, 1, 2])
     
     return model
 
 ### resnet model with bottleneck:
-#   - 31 conv layers
-#   - 31 bn layers
+#   - 38 conv layers
+#   - 38 bn layers
 #   - 1 fc
-def isaResnet_32():
-    model = ResNet(Bottleneck, [2, 4, 4])
+def isaResnet_38():
+    model = ResNet(Bottleneck, [2, 2, 4, 4])
     return model
 
