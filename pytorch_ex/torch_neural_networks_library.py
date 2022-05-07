@@ -1,3 +1,4 @@
+from pickle import NONE
 import torch
 import torch.nn.functional as f
 from torch import nn
@@ -253,25 +254,95 @@ class Bottleneck(nn.Module):
 
         return out
 
+class ReducedBlock(nn.Module):
+    def __init__(
+        self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        downsample: Optional[nn.Module] = None,
+    ) -> None:
+        super().__init__()
+        norm_layer = nn.BatchNorm2d
+
+        self.concat = None
+        self.maxpool = None
+        if inplanes != planes:
+            self.concat_check = True
+            self.concat = concatLayer()
+        else:
+            self.concat_check = False
+        if stride != 1:
+            self.stride_check = True
+            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=stride, padding=1)
+        else:
+            self.stride_check = False
+
+        width = int(inplanes / 2)
+        
+        self.conv1 = conv1x1(planes, width)
+        self.bn1 = norm_layer(width)
+        self.conv2 = conv1x1(width, width)
+        self.bn2 = norm_layer(width)
+        self.conv3 = conv1x1(width, planes)
+        self.bn3 = norm_layer(planes)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.stride_check:
+            x = self.maxpool(x)
+        if self.concat_check:
+            x = self.concat(x)
+        
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
 ### modified from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 class ResNet(nn.Module):
-    def __init__(self, block, layers):
+    def __init__(self, blocks, layers, default_res):
         super().__init__()
 
-        ### 28 -> 28
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=1, padding=2, bias=False)
-        self.bn1 = nn.BatchNorm2d(32)
+        if default_res:
+            self._make_layer = self._make_layer_conv_res
+        else:
+            self._make_layer = self._make_layer_direct_res
+        
         ### 28 -> 14
-        self.layer1 = self._make_layer(block, 32, 64, layers[0], stride=2)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
         ### 14 -> 14
-        self.layer2 = self._make_layer(block, 64, 128, layers[1])
+        self.layer1 = self._make_layer(blocks[0], 32, 64, layers[0])
+        ### 14 -> 14
+        self.layer2 = self._make_layer(blocks[1], 64, 128, layers[1])
         ### 14 -> 7
-        self.layer3 = self._make_layer(block, 128, 128, layers[2], stride=2)
+        self.layer3 = self._make_layer(blocks[2], 128, 128, layers[2], stride=2)
         ### 7 -> 2
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
+        '''
+        ### 4 -> 1
+        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
+        '''
         self.relu = nn.ReLU(inplace=True)
         self.flatten = nn.Flatten()
         self.linear = nn.Linear(512, 10)
+        '''
+        self.linear = nn.Linear(128, 10)
+        '''
 
         ### initialization
         for m in self.modules():
@@ -288,8 +359,28 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
             
+    def _make_layer_conv_res(self, block, inplanes, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 :
+            downsample = nn.Sequential(
+                    conv1x1(inplanes, planes, stride),
+                    nn.BatchNorm2d(planes),
+                )
+        elif inplanes != planes:
+            downsample = nn.Sequential(
+                    conv1x1(inplanes, planes),
+                    nn.BatchNorm2d(planes),
+                )
 
-    def _make_layer(self, block, inplanes, planes, blocks, stride=1):
+        layers = []
+        ### il primo blocco fa il downsample
+        layers.append(block(inplanes, planes, stride, downsample))
+        for i in range(1, blocks):
+            layers.append(block(planes, planes))
+
+        return nn.Sequential(*layers)
+
+    def _make_layer_direct_res(self, block, inplanes, planes, blocks, stride=1):
         downsample = None
         if stride != 1 :
             downsample = nn.Sequential(
@@ -328,19 +419,41 @@ class ResNet(nn.Module):
         return x
 
 ### resnet model with bottleneck:
-#   - 20 conv layers
-#   - 20 bn layers
+#   - 13 conv layers
+#   - 13 bn layers
 #   - 1 fc
-def isaResnet_20():
-    model = ResNet(Bottleneck, [2, 1, 1, 2])
-    
+def isaResnet_14():
+    model = ResNet([Bottleneck, Bottleneck, ReducedBlock], [1, 1, 2], default_res=True)
     return model
 
 ### resnet model with bottleneck:
-#   - 38 conv layers
-#   - 38 bn layers
+#   - 25 conv layers
+#   - 25 bn layers
 #   - 1 fc
-def isaResnet_38():
-    model = ResNet(Bottleneck, [2, 2, 4, 4])
+def isaResnet_26():
+    model = ResNet([Bottleneck, Bottleneck, ReducedBlock], [2, 2, 4], default_res=True)
     return model
 
+### resnet model with bottleneck:
+#   - 49 conv layers
+#   - 49 bn layers
+#   - 1 fc
+def isaResnet_50():
+    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [4, 4, 8], default_res=False)
+    return model
+
+### resnet model with bottleneck:
+#   - 97 conv layers
+#   - 97 bn layers
+#   - 1 fc
+def isaResnet_98():
+    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [8, 8, 16], default_res=False)
+    return model
+
+### resnet model with bottleneck:
+#   - 193 conv layers
+#   - 193 bn layers
+#   - 1 fc
+def isaResnet_194():
+    model = ResNet([ReducedBlock, ReducedBlock, ReducedBlock], [16, 16, 32], default_res=False)
+    return model

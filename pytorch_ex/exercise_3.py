@@ -57,7 +57,7 @@ from torchvision import datasets
 from torchvision.transforms import transforms
 import numpy as np
 from tqdm import tqdm
-from torch_neural_networks_library import isaResnet_20, isaResnet_38
+from torch_neural_networks_library import isaResnet_14, isaResnet_26, isaResnet_50, isaResnet_98, isaResnet_194
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 Path("./runs/exercise_3").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
@@ -90,9 +90,10 @@ for X, y in test_dataloader:
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
+device = "cpu"
 
 # TODO: write your own model in torch_neural_networks_library.py and call it here
-model = isaResnet_38()  # create model instance, initialize parameters, send to device
+model = isaResnet_194()  # create model instance, initialize parameters, send to device
 
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 
@@ -105,13 +106,11 @@ params = sum([np.prod(p.size()) for p in model_parameters])
 memory = params * 32 / 8 / 1024 / 1024
 print("this model has ", params, " parameters")
 print("total weight memory is %.4f MB" %(memory))
-
 '''
 for name, par in model.named_parameters():
     print(name)
     print(par.size().numel())
 '''
-
 loss_fn = nn.CrossEntropyLoss()
 
 start_epoch = 0
@@ -170,7 +169,7 @@ def test(dataloader, model, loss_fn):
 ###training parameters
 batch_size = 256
 lr = 1e-2
-wd = lr/128
+wd = 5e-5
 epochs = 200
 opt_step = 40
 
@@ -179,7 +178,7 @@ best_model = []
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 print("Use $ tensorboard --logdir=runs to access training statistics")
 
-model = isaResnet_38()
+model = isaResnet_26()
 model.to(device)
 train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
 test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
@@ -189,7 +188,7 @@ for mod in model.modules():
     if isinstance(mod, nn.BatchNorm2d):
         params += list(mod.parameters())
 optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt_step, gamma=0.3)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt_step, gamma=0.4)
 
 for t in tqdm(range(epochs)):
     print(f"Epoch {t+1}\n-------------------------------")
@@ -198,7 +197,7 @@ for t in tqdm(range(epochs)):
     writer.add_scalar('test accuracy', current_correct, t)
     ck = (t+1) % opt_step
     if ck == 0:
-        lr = lr - 0.3*lr
+        lr = lr - 0.4*lr
         torch.save({
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
