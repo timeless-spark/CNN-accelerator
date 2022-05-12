@@ -39,7 +39,6 @@ import numpy as np
 from tqdm import tqdm
 from torch_neural_networks_library import mini_resnet
 from pathlib import Path
-from find_num_workers import find_num_workers
 from torch.utils.tensorboard import SummaryWriter
 
 Path("./runs/exercise_2bis").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
@@ -82,8 +81,8 @@ print("Mean: ", mean, "Std: ", std)
 transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.2862], std=[0.3204]), transforms.RandomHorizontalFlip()])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.2862], std=[0.3204])])
 
-training_data = datasets.FashionMNIST(root="data", train=True, download=False, transform=transform_train)
-test_data = datasets.FashionMNIST(root="data", train=False, download=False, transform=transform_test)
+training_data = datasets.FashionMNIST(root="data", train=True, download=True, transform=transform_train)
+test_data = datasets.FashionMNIST(root="data", train=False, download=True, transform=transform_test)
 
 #best_workers = find_num_workers(training_data=training_data, batch_size=batch_size)
 best_workers = 6
@@ -98,9 +97,9 @@ images, labels = dataiter.next()
 img_grid = torchvision.utils.make_grid(images)
 writer.add_image(str(batch_size)+'_FashionMNIST_images', img_grid)
 
+'''
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
-'''
 device = "cpu"
 
 # TODO: write your own model in torch_neural_networks_library.py and call it here
@@ -157,7 +156,7 @@ def test(dataloader, model, loss_fn):
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
     return correct
 
-batch_size = [16, 32, 64, 128]
+batch_size = [16, 32, 64]
 lr = 5e-3
 epochs = 5
 best_correct = 0
@@ -169,7 +168,7 @@ for batch in batch_size:
     train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)
     test_dataloader = DataLoader(test_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)
     optimizer = torch.optim.SGD(model.parameters(), weight_decay=0.00001, momentum=.8, lr=lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.6)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[2,3,4], gamma=0.2, verbose=True)
     print(f"using: batch={batch}, n_ep={epochs}, lr={lr}")
     for t in tqdm(range(epochs)):
         print(f"Epoch {t+1}\n-------------------------------")
