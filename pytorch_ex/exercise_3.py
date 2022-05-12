@@ -70,7 +70,7 @@ load_pretrained = False  # For this exercise you might need to interrupt and res
                          # flag to load a pre-trained model
 
 
-transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
+transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)), transforms.RandomResizedCrop(size=(28,28), scale=(0.8, 1.0)), transforms.RandomHorizontalFlip(0.5)])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
 # TODO: use two different transforms for train and test, both should apply input normalization, but only the training
 #       transform should augment the data.
@@ -144,7 +144,7 @@ def train(dataloader, model, loss_fn, optimizer, epoch):
         loss.backward()
         optimizer.step()
 
-        if batch % 100 == 0:
+        if batch % 10 == 0:
             loss, current = loss.item(), batch * len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
             writer.add_scalar('training loss', loss / 100, epoch * len(dataloader) + batch)
@@ -169,35 +169,47 @@ def test(dataloader, model, loss_fn):
 ###training parameters
 batch_size = 256
 lr = 1e-2
-wd = 5e-5
+L2_lambda = 5e-4
+wd = L2_lambda/lr
 epochs = 200
-opt_step = 40
+opt_mil = [40,80,120,160]
 
 best_correct = 0
 best_model = []
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 print("Use $ tensorboard --logdir=runs to access training statistics")
 
-model = isaResnet_26()
+model = isaResnet_194()
 model.to(device)
 train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
 test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+
 ### TRAINING ONLY THE BATCH NORM..
 params = list()
 for mod in model.modules():
     if isinstance(mod, nn.BatchNorm2d):
         params += list(mod.parameters())
+'''
+### TRAINING BATCH NORM + FC LAYER..
+params = list()
+for mod in model.modules():
+    if isinstance(mod, nn.BatchNorm2d):
+        params += list(mod.parameters())
+    if isinstance(mod, nn.Linear):
+        params += list(mod.parameters())
+'''
 optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt_step, gamma=0.4)
+scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opt_mil, gamma=0.1, verbose=True)
 
+mil_index = 0
 for t in tqdm(range(epochs)):
     print(f"Epoch {t+1}\n-------------------------------")
     loss = train(train_dataloader, model, loss_fn, optimizer, t)
     current_correct = test(test_dataloader, model, loss_fn)
     writer.add_scalar('test accuracy', current_correct, t)
-    ck = (t+1) % opt_step
-    if ck == 0:
-        lr = lr - 0.4*lr
+    if (t+1) == opt_mil[mil_index]:
+        lr = scheduler.get_last_lr
+        mil_index += 1
         torch.save({
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
@@ -205,8 +217,8 @@ for t in tqdm(range(epochs)):
             'test_acc': current_correct,
             'device': device,
             'model': model,
-            'train_parameters': {'batch': batch_size, 'actual_epoch': t, 'lr': lr, 'wd': wd, 'opt_step': opt_step}
-        }, f"./saved_models/exercise3_{ck}.pth")
+            'train_parameters': {'batch': batch_size, 'actual_epoch': t, 'lr': lr, 'wd': wd, 'opt_step': opt_mil}
+        }, f"./saved_models/exercise3_{mil_index}.pth")
         print("Saved PyTorch Model State")
 
 writer.close()

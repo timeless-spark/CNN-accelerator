@@ -61,13 +61,13 @@ class default_model(nn.Module):
 class micro_resnet(nn.Module):
     def __init__(self):
         super(micro_resnet, self).__init__()
-        self.conv2D_1 = nn.Conv2d(1,4,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.conv2D_2 = nn.Conv2d(4,16,kernel_size=(3,3), stride=(2,2), padding=1)
+        self.conv2D_1 = nn.Conv2d(1,4,kernel_size=(3,3), stride=(2,2), padding=1, bias=False)
+        self.conv2D_2 = nn.Conv2d(4,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=False)
         self.skip1 = nn.MaxPool2d(kernel_size=(4,4), stride=(4,4))
-        self.conv2D_3 = nn.Conv2d(16,4, kernel_size=(1,1), stride=(1,1))
-        self.conv2D_4 = nn.Conv2d(4,4,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.conv2D_5 = nn.Conv2d(4,16,kernel_size=(1,1), stride=(1,1))
-        self.skip2 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2), padding=1)
+        self.conv2D_3 = nn.Conv2d(16,4, kernel_size=(1,1), stride=(1,1), bias=False)
+        self.conv2D_4 = nn.Conv2d(4,4,kernel_size=(3,3), stride=(2,2), padding=1, bias=False)
+        self.conv2D_5 = nn.Conv2d(4,16,kernel_size=(1,1), stride=(1,1), bias=False)
+        self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
         self.act = nn.ReLU6()
         self.flatten = nn.Flatten()
         self.linear = nn.Linear(256,10)
@@ -104,13 +104,13 @@ class micro_resnet(nn.Module):
 class nano_resnet(nn.Module):
     def __init__(self):
         super(nano_resnet, self).__init__()
-        self.conv2D_1 = nn.Conv2d(1,4,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.conv2D_2 = nn.Conv2d(4,8,kernel_size=(3,3), stride=(2,2), padding=1)
+        self.conv2D_1 = nn.Conv2d(1,4,kernel_size=(3,3), stride=(2,2), padding=1, bias=False)
+        self.conv2D_2 = nn.Conv2d(4,8,kernel_size=(3,3), stride=(2,2), padding=1, bias=False)
         self.skip1 = nn.MaxPool2d(kernel_size=(4,4), stride=(4,4))
-        self.conv2D_3 = nn.Conv2d(8,2, kernel_size=(1,1), stride=(1,1))
-        self.conv2D_4 = nn.Conv2d(2,2,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.conv2D_5 = nn.Conv2d(2,8,kernel_size=(1,1), stride=(1,1))
-        self.skip2 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2), padding=1)
+        self.conv2D_3 = nn.Conv2d(8,2, kernel_size=(1,1), stride=(1,1), bias=False)
+        self.conv2D_4 = nn.Conv2d(2,2,kernel_size=(3,3), stride=(2,2), padding=1, bias=False)
+        self.conv2D_5 = nn.Conv2d(2,8,kernel_size=(1,1), stride=(1,1), bias=False)
+        self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
         self.act = nn.ReLU6()
         self.flatten = nn.Flatten()
         self.linear = nn.Linear(128,10)
@@ -148,17 +148,19 @@ class nano_resnet(nn.Module):
 class mini_resnet(nn.Module):
     def __init__(self):
         super(mini_resnet, self).__init__()
-        self.conv2D_1 = nn.Conv2d(1,8,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.conv2D_2 = nn.Conv2d(8,32,kernel_size=(3,3), stride=(1,1), padding=1)
-        self.skip1 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
-        self.conv2D_3 = nn.Conv2d(32,8, kernel_size=(1,1), stride=(1,1))
-        self.conv2D_4 = nn.Conv2d(8,8,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.conv2D_5 = nn.Conv2d(8,32,kernel_size=(1,1), stride=(1,1))
-        self.skip2 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
+        self.conv2D_1 = nn.Conv2d(1,16,kernel_size=(3,3), stride=(1,1), padding=1, bias=True)
+        self.downS_1 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        self.conv2D_2 = nn.Conv2d(16,32,kernel_size=(3,3), stride=(1,1), padding=1, bias=True)
+        self.skip1 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        self.conv2D_3 = nn.Conv2d(32,16, kernel_size=(1,1), stride=(1,1), bias=False)
+        self.conv2D_4 = nn.Conv2d(16,16,kernel_size=(3,3), stride=(1,1), padding=1, bias=False)
+        self.downS_2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        self.conv2D_5 = nn.Conv2d(16,32,kernel_size=(1,1), stride=(1,1), bias=False)
+        self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
         self.act = nn.ReLU6()
         self.flatten = nn.Flatten()
         self.drop = nn.Dropout(0.5)
-        self.linear = nn.Linear(1568,10)
+        self.linear = nn.Linear(784,10)
 
         torch.nn.init.kaiming_normal_(self.conv2D_1.weight)
         torch.nn.init.kaiming_normal_(self.conv2D_2.weight)
@@ -172,6 +174,7 @@ class mini_resnet(nn.Module):
         x_skip1 = self.skip1(x)
         out = self.conv2D_1(x)
         out = self.act(out)
+        out = self.downS_1(out)
         out = self.conv2D_2(out)
         out = out + x_skip1
         out = self.act(out)
@@ -181,6 +184,7 @@ class mini_resnet(nn.Module):
         out = self.act(out)
         out = self.conv2D_4(out)
         out = self.act(out)
+        out = self.downS_2(out)
         out = self.conv2D_5(out)
         out = out + x_skip2
         out = self.act(out)
@@ -216,6 +220,7 @@ class Bottleneck(nn.Module):
         planes: int,
         stride: int = 1,
         downsample: Optional[nn.Module] = None,
+        dropout: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
         norm_layer = nn.BatchNorm2d
@@ -231,19 +236,26 @@ class Bottleneck(nn.Module):
         self.bn3 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
+        self.drop = dropout
 
     def forward(self, x: Tensor) -> Tensor:
         identity = x
 
         out = self.conv1(x)
+        if self.drop is not None:
+            out = self.drop(out)
         out = self.bn1(out)
         out = self.relu(out)
 
         out = self.conv2(out)
+        if self.drop is not None:
+            out = self.drop(out)
         out = self.bn2(out)
         out = self.relu(out)
 
         out = self.conv3(out)
+        if self.drop is not None:
+            out = self.drop(out)
         out = self.bn3(out)
 
         if self.downsample is not None:
@@ -261,6 +273,7 @@ class ReducedBlock(nn.Module):
         planes: int,
         stride: int = 1,
         downsample: Optional[nn.Module] = None,
+        dropout: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
         norm_layer = nn.BatchNorm2d
@@ -287,6 +300,7 @@ class ReducedBlock(nn.Module):
         self.conv3 = conv1x1(width, planes)
         self.bn3 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
+        self.drop = dropout
 
     def forward(self, x: Tensor) -> Tensor:
         if self.stride_check:
@@ -297,14 +311,20 @@ class ReducedBlock(nn.Module):
         identity = x
 
         out = self.conv1(x)
+        if self.drop is not None:
+            out = self.drop(out)
         out = self.bn1(out)
         out = self.relu(out)
 
         out = self.conv2(out)
+        if self.drop is not None:
+            out = self.drop(out)
         out = self.bn2(out)
         out = self.relu(out)
 
         out = self.conv3(out)
+        if self.drop is not None:
+            out = self.drop(out)
         out = self.bn3(out)
 
         out += identity
@@ -314,7 +334,7 @@ class ReducedBlock(nn.Module):
 
 ### modified from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 class ResNet(nn.Module):
-    def __init__(self, blocks, layers, default_res):
+    def __init__(self, blocks, layers, default_res, drop=[False, False, False]):
         super().__init__()
 
         if default_res:
@@ -323,26 +343,27 @@ class ResNet(nn.Module):
             self._make_layer = self._make_layer_direct_res
         
         ### 28 -> 14
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2, bias=False)
-        self.bn1 = nn.BatchNorm2d(32)
-        ### 14 -> 14
-        self.layer1 = self._make_layer(blocks[0], 32, 64, layers[0])
-        ### 14 -> 14
-        self.layer2 = self._make_layer(blocks[1], 64, 128, layers[1])
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
         ### 14 -> 7
-        self.layer3 = self._make_layer(blocks[2], 128, 128, layers[2], stride=2)
+        self.layer1 = self._make_layer(blocks[0], 64, 64, layers[0], stride=2, drop=drop[0])
+        ### 7 -> 7
+        self.layer2 = self._make_layer(blocks[1], 64, 128, layers[1], drop=drop[1])
+        ### 7 -> 4
+        self.layer3 = self._make_layer(blocks[2], 128, 128, layers[2], stride=2, drop=drop[2])
+        '''
         ### 7 -> 2
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
         '''
         ### 4 -> 1
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
-        '''
+        
         self.relu = nn.ReLU(inplace=True)
         self.flatten = nn.Flatten()
+        '''
         self.linear = nn.Linear(512, 10)
         '''
         self.linear = nn.Linear(128, 10)
-        '''
 
         ### initialization
         for m in self.modules():
@@ -359,7 +380,7 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
             
-    def _make_layer_conv_res(self, block, inplanes, planes, blocks, stride=1):
+    def _make_layer_conv_res(self, block, inplanes, planes, blocks, stride=1, drop=False):
         downsample = None
         if stride != 1 :
             downsample = nn.Sequential(
@@ -371,16 +392,20 @@ class ResNet(nn.Module):
                     conv1x1(inplanes, planes),
                     nn.BatchNorm2d(planes),
                 )
+        
+        dropout = None
+        if drop != False:
+            dropout = nn.Dropout2d(0.1)
 
         layers = []
         ### il primo blocco fa il downsample
-        layers.append(block(inplanes, planes, stride, downsample))
+        layers.append(block(inplanes, planes, stride, downsample, dropout=dropout))
         for i in range(1, blocks):
-            layers.append(block(planes, planes))
+            layers.append(block(planes, planes, dropout=dropout))
 
         return nn.Sequential(*layers)
 
-    def _make_layer_direct_res(self, block, inplanes, planes, blocks, stride=1):
+    def _make_layer_direct_res(self, block, inplanes, planes, blocks, stride=1, drop=False):
         downsample = None
         if stride != 1 :
             downsample = nn.Sequential(
@@ -391,12 +416,16 @@ class ResNet(nn.Module):
         elif inplanes != planes:
             downsample = concatLayer()
 
+        dropout = None
+        if drop != False:
+            dropout = nn.Dropout2d(0.1)
+
         layers = []
         ### il primo blocco fa il downsample
-        layers.append(block(inplanes, planes, stride, downsample))
+        layers.append(block(inplanes, planes, stride, downsample, dropout=dropout))
         ### si potrebbe pensare ad una crescita dei canali graduale nei vari blocchi...
         for i in range(1, blocks):
-            layers.append(block(planes, planes))
+            layers.append(block(planes, planes, dropout=dropout))
 
         return nn.Sequential(*layers)
 
@@ -431,7 +460,7 @@ def isaResnet_14():
 #   - 25 bn layers
 #   - 1 fc
 def isaResnet_26():
-    model = ResNet([Bottleneck, Bottleneck, ReducedBlock], [2, 2, 4], default_res=True)
+    model = ResNet([Bottleneck, Bottleneck, ReducedBlock], [2, 2, 4], default_res=True, drop=[True, False, False])
     return model
 
 ### resnet model with bottleneck:
@@ -439,7 +468,7 @@ def isaResnet_26():
 #   - 49 bn layers
 #   - 1 fc
 def isaResnet_50():
-    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [4, 4, 8], default_res=False)
+    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [4, 4, 8], default_res=False, drop=[True, False, False])
     return model
 
 ### resnet model with bottleneck:
@@ -447,7 +476,7 @@ def isaResnet_50():
 #   - 97 bn layers
 #   - 1 fc
 def isaResnet_98():
-    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [8, 8, 16], default_res=False)
+    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [8, 8, 16], default_res=False, drop=[True, True, False])
     return model
 
 ### resnet model with bottleneck:
@@ -455,5 +484,5 @@ def isaResnet_98():
 #   - 193 bn layers
 #   - 1 fc
 def isaResnet_194():
-    model = ResNet([ReducedBlock, ReducedBlock, ReducedBlock], [16, 16, 32], default_res=False)
+    model = ResNet([ReducedBlock, ReducedBlock, ReducedBlock], [16, 16, 32], default_res=False, drop=[True, True, False])
     return model
