@@ -206,9 +206,15 @@ for t in tqdm(range(epochs)):
     print(f"Epoch {t+1}\n-------------------------------")
     loss = train(train_dataloader, model, loss_fn, optimizer, t)
     current_correct = test(test_dataloader, model, loss_fn)
+    scheduler.step()
     writer.add_scalar('test accuracy', current_correct, t)
     if (t+1) == opt_mil[mil_index]:
-        lr = scheduler.get_last_lr
+        new_lr = scheduler.get_last_lr()
+        delta = (lr - new_lr) / lr
+        L2_lambda = L2_lambda * delta
+        wd = L2_lambda/lr
+        lr = new_lr
+        optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
         mil_index += 1
         torch.save({
             'model_state_dict': model.state_dict(),
