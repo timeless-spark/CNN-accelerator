@@ -17,9 +17,9 @@ from torch.nn import functional as F
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, int_channels=None, kernel_size=(3, 3), padding=(1, 1),
+    def __init__(self, in_channels, out_channels, int_channels=None, SP_kernel_size=(3, 3), padding=(1, 1),
                  bias=True, block_type="Residual33", halve_resolution=False, squeeze_and_excite=False,
-                 replicas=1, ratio=2):
+                 SP_replicas=1, SE_ratio=2):
         super(ResidualBlock, self).__init__()
         self.squeeze_and_excite = squeeze_and_excite
         self.halve_resolution = halve_resolution
@@ -30,7 +30,7 @@ class ResidualBlock(nn.Module):
         elif block_type == "Residual131":
             self.res_block = Residual131(in_channels, int_channels, out_channels, stride, bias)
         elif block_type == "SeparableConv2d":
-            self.res_block = SeparableConv2d(in_channels, out_channels, kernel_size, padding, halve_resolution, bias, replicas)
+            self.res_block = SeparableConv2d(in_channels, out_channels, SP_kernel_size, padding, halve_resolution, bias, SP_replicas)
         else:
             exit("invalid block")
         # Configure the residual path
@@ -45,13 +45,15 @@ class ResidualBlock(nn.Module):
             self.pool = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
 
         if self.squeeze_and_excite:
-            self.se = SqueezeAndExcite(out_channels, ratio, bias)
+            self.se = SqueezeAndExcite(out_channels, SE_ratio, bias)
         self.act = nn.ReLU()
 
     def forward(self, x):
         out = self.res_block(x)
         res = self.bn_up(self.up(x)) if self.upscale else x
         res = self.pool(res) if (self.halve_resolution and not self.upscale) else res
+        ###collegamento epr squeeze and excite..
+        res = self.se(res) if self.squeeze_and_excite else res
         out = self.act(out + res)
         return out
 
@@ -155,12 +157,16 @@ class SqueezeAndExcite(nn.Module): # TODO: complete SqueezeAndExcite
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(int(float(channels)/float(ratio)), channels, bias=bias)
         self.sigmoid = nn.Sigmoid()
+        self.flatten = nn.Flatten()
 
     def forward(self, x):
         out = F.adaptive_avg_pool2d(x, 1)
+        out = self.flatten(out)
         out = self.fc1(out)
         out = self.relu(out)
         out = self.fc2(out)
         out = self.sigmoid(out)
+        out = out.reshape((out.shape[0], out.shape[1], 1, 1))
+
         return out * x
 
