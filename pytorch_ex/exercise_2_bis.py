@@ -32,7 +32,7 @@ exercise1_default_optimized.pth respectively. The optimized CNN model is provide
 
 import torch, torchvision, copy
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets
 from torchvision.transforms import transforms
 import numpy as np
@@ -81,11 +81,11 @@ print("Mean: ", mean, "Std: ", std)
 transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.2862], std=[0.3204]), transforms.RandomHorizontalFlip()])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.2862], std=[0.3204])])
 
-training_data = datasets.FashionMNIST(root="data", train=True, download=True, transform=transform_train)
+training_data, validation_data = random_split(datasets.FashionMNIST(root="data", train=True, download=True, transform=transform_train), [50000, 10000])
 test_data = datasets.FashionMNIST(root="data", train=False, download=True, transform=transform_test)
 
 #best_workers = find_num_workers(training_data=training_data, batch_size=batch_size)
-best_workers = 6
+best_workers = 2
 
 '''
 for X, y in test_dataloader:
@@ -100,7 +100,6 @@ writer.add_image(str(batch_size)+'_FashionMNIST_images', img_grid)
 '''
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
-device = "cpu"
 
 # TODO: write your own model in torch_neural_networks_library.py and call it here
 model = mini_resnet()  # create model instance, initialize parameters, send to device
@@ -117,7 +116,8 @@ memory = params * 32 / 8 / 1024 / 1024
 print("this model has ", params, " parameters")
 print("total weight memory is %.4f MB" %(memory))
 
-loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([2.,1.,2.2,1.1,2.,1.,5.,1.,1.,1.]))
+loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([2.,1.,2.2,1.1,2.,1.,5.,1.,1.,1.]).cuda())
+#loss_fn = nn.CrossEntropyLoss()
 
 def train(dataloader, model, loss_fn, optimizer, epoch):
     size = len(dataloader.dataset)
@@ -156,8 +156,8 @@ def test(dataloader, model, loss_fn):
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
     return correct
 
-batch_size = [16, 32, 64]
-lr = 5e-3
+batch_size = [16]
+lr = 8e-3
 epochs = 5
 best_correct = 0
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
@@ -165,15 +165,19 @@ print("Use $ tensorboard --logdir=runs/exercise_2bis to access training statisti
 for batch in batch_size:
     model = mini_resnet()
     model.to(device)
-    train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)
-    test_dataloader = DataLoader(test_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)
+
+    train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+    validation_dataloader = DataLoader(validation_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+    test_dataloader = DataLoader(test_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+    
     optimizer = torch.optim.SGD(model.parameters(), weight_decay=0.00001, momentum=.8, lr=lr)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[2,3,4], gamma=0.2, verbose=True)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[3], gamma=0.2, verbose=True)
+
     print(f"using: batch={batch}, n_ep={epochs}, lr={lr}")
     for t in tqdm(range(epochs)):
         print(f"Epoch {t+1}\n-------------------------------")
         loss = train(train_dataloader, model, loss_fn, optimizer, t)
-        current_correct = test(test_dataloader, model, loss_fn)
+        current_correct = test(validation_dataloader, model, loss_fn)
         scheduler.step()
         writer.add_scalar('test accuracy', current_correct, t)
         writer.flush()
