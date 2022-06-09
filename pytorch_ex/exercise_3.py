@@ -52,12 +52,13 @@ The gpu models were trained on a Nvidia RTX3090 for 320 epochs (around 50 minute
 from telnetlib import NOP
 import torch, torchvision, copy
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets
 from torchvision.transforms import transforms
 import numpy as np
 from tqdm import tqdm
-from torch_neural_networks_library import isaResnet_14, isaResnet_26, isaResnet_50, isaResnet_98, isaResnet_194
+from torch_neural_networks_library import isaResnet_14, isaResnet_26, isaResnet_50, isaResnet_98
+from torch_neural_networks_library import ex3ResNet
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 Path("./runs/exercise_3").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
@@ -70,30 +71,30 @@ load_pretrained = False  # For this exercise you might need to interrupt and res
                          # flag to load a pre-trained model
 
 
-transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)), transforms.RandomResizedCrop(size=(28,28), scale=(0.8, 1.0)), transforms.RandomHorizontalFlip(0.5)])
+transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)), transforms.RandomResizedCrop(size=(32,32), scale=(0.8, 1.0)), transforms.RandomHorizontalFlip(0.5)])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
 # TODO: use two different transforms for train and test, both should apply input normalization, but only the training
 #       transform should augment the data.
-training_data = datasets.CIFAR10(root="data", train=True, download=True, transform=transform_train)
+training_data, validation_data = random_split(datasets.CIFAR10(root="data", train=True, download=True, transform=transform_train), [45000, 5000])
 test_data = datasets.CIFAR10(root="data", train=False, download=True, transform=transform_test)
 
-best_workers = 6
+best_workers = 2
 batch_size = 32
 
 train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+validation_dataloader = DataLoader(validation_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
 test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
 
-for X, y in test_dataloader:
-    print("Shape of X [N, C, H, W]: ", X.shape)
-    print("Shape of y: ", y.shape, y.dtype)
-    break
+print("train dataset samples: ", len(train_dataloader.dataset))
+print("validation dataset samples: ", len(validation_dataloader.dataset))
+print("test dataset samples: ", len(test_dataloader.dataset))
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 device = "cpu"
 
 # TODO: write your own model in torch_neural_networks_library.py and call it here
-model = isaResnet_194()  # create model instance, initialize parameters, send to device
+model = ex3ResNet()  # create model instance, initialize parameters, send to device
 
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 
@@ -169,7 +170,7 @@ def test(dataloader, model, loss_fn):
 ###training parameters
 batch_size = 256
 lr = 1e-2
-L2_lambda = 5e-4
+L2_lambda = 5e-8
 wd = L2_lambda/lr
 epochs = 200
 opt_mil = [40,80,120,160]
@@ -179,16 +180,20 @@ best_model = []
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 print("Use $ tensorboard --logdir=runs to access training statistics")
 
-model = isaResnet_194()
+model = ex3ResNet()
 model.to(device)
 train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
 test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
 
+### TRAINING THE ALL PARAMS..
+params = model.parameters()
+'''
 ### TRAINING ONLY THE BATCH NORM..
 params = list()
 for mod in model.modules():
     if isinstance(mod, nn.BatchNorm2d):
         params += list(mod.parameters())
+'''
 '''
 ### TRAINING BATCH NORM + FC LAYER..
 params = list()
@@ -200,21 +205,19 @@ for mod in model.modules():
 '''
 optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opt_mil, gamma=0.1, verbose=True)
+#scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=1, threshold=0.0001, threshold_mode='abs')
 
 mil_index = 0
 for t in tqdm(range(epochs)):
     print(f"Epoch {t+1}\n-------------------------------")
     loss = train(train_dataloader, model, loss_fn, optimizer, t)
-    current_correct = test(test_dataloader, model, loss_fn)
+    current_correct = test(validation_dataloader, model, loss_fn)
     scheduler.step()
+    #scheduler.step(loss)
     writer.add_scalar('test accuracy', current_correct, t)
     if (t+1) == opt_mil[mil_index]:
         new_lr = scheduler.get_last_lr()
-        delta = (lr - new_lr) / lr
-        L2_lambda = L2_lambda * delta
-        wd = L2_lambda/lr
         lr = new_lr
-        optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
         mil_index += 1
         torch.save({
             'model_state_dict': model.state_dict(),
