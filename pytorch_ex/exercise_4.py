@@ -69,7 +69,7 @@ import torch
 from torch import nn
 import quantization as cs
 import brevitas.nn as qnn
-from brevitas.quant import Int8Bias as BiasQuant
+from brevitas.quant import Int8Bias as BiasQuant, Uint8ActPerTensorFloat, Int8ActPerTensorFloat
 from torch.autograd import Function
 import torch.nn.functional as F
 
@@ -174,21 +174,21 @@ class quant_custom_mini_resnet(nn.Module):
         self.quantization = True  # set to True to enable quantization, set to False to train with FP32
 
         self.conv2D_1 = cs.Conv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
-        self.conv2D_2 = cs.Conv2d(32,64,kernel_size=(3,3), stride=(1,1), padding=1, bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
-        self.skip1 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        self.conv2D_2 = cs.Conv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
+        self.skip1 = nn.MaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2)
         self.conv2D_3 = cs.Conv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
-        self.conv2D_4 = cs.Conv2d(16,16,kernel_size=(3,3), stride=(1,1), padding=1, bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
+        self.conv2D_4 = cs.Conv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
         self.conv2D_5 = cs.Conv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
-        self.avgpool = nn.AvgPool2d(kernel_size=(4,4), stride=(3,3), padding=0)
-        ### different ReLU for different aplha (??)
+        self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        self.avgpool = nn.AvgPool2d(kernel_size=(4,4), stride=(1,1), padding=0)
+        ### different ReLU for different aplha
         self.act_1 = cs.ReLu(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
         self.act_2 = cs.ReLu(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
         self.act_3 = cs.ReLu(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
         self.act_4 = cs.ReLu(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
         self.act_5 = cs.ReLu(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
         self.flatten = nn.Flatten()
-        #self.drop = nn.Dropout(0.2)
-        self.linear = cs.Linear(1024, 10, bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
+        self.linear = cs.Linear(64, 10, bias=True, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
         
         nn.init.kaiming_normal_(self.conv2D_1.weight)
         nn.init.kaiming_normal_(self.conv2D_2.weight)
@@ -206,9 +206,8 @@ class quant_custom_mini_resnet(nn.Module):
         out = self.conv2D_2(out)
         out = out + x_skip1
         out = self.act_2(out)
-        #out = self.drop(out)
         #bottleneck res connection (3 layer)
-        x_skip2 = out
+        x_skip2 = self.skip2(out)
         out = self.conv2D_3(out)
         out = self.act_3(out)
         out = self.conv2D_4(out)
@@ -218,9 +217,8 @@ class quant_custom_mini_resnet(nn.Module):
         out = self.act_5(out)
         #downsample
         out = self.avgpool(out)
-        #flatten + dropout + fully connected (1 layer)
+        #flatten + fully connected (1 layer)
         out = self.flatten(out)
-        #out = self.drop(out)
         out = self.linear(out)
         return out
 
@@ -230,7 +228,7 @@ class PACT_QuantReLU(nn.Module):
         super(PACT_QuantReLU, self).__init__()
         self.alpha = nn.Parameter(torch.tensor(alpha))
         
-        self.relu = qnn.QuantReLU(bit_width=act_width, return_quant_tensor=True)
+        self.relu = qnn.QuantReLU(act_bit_width=act_width, return_quant_tensor=True)
 
     def forward(self, x):
         out = torch.clamp(x, min=0, max=self.alpha.item())
@@ -241,9 +239,9 @@ class PACT_QuantReLU(nn.Module):
 class quant_brevitas_mini_resnet(nn.Module):
     def __init__(self):
         super(quant_brevitas_mini_resnet, self).__init__()
-        self.weight_bit = 32  # TODO: check the precision supported by Brevitas and the FINN engine
-        self.act_bit = 32   # TODO: check the precision supported by Brevitas and the FINN engine
-        self.bias_bit = 32  # TODO: notice how the Bias quantization is fixed in Brevitas. Which values can use use?
+        self.weight_bit = 8  # TODO: check the precision supported by Brevitas and the FINN engine
+        self.act_bit = 8   # TODO: check the precision supported by Brevitas and the FINN engine
+        self.bias_bit = 16  # TODO: notice how the Bias quantization is fixed in Brevitas. Which values can use use? -> WHATEVER AS FAR AS YOU SAY TO LOOK AT THE DOCS..!!
         # TODO: adjust the bias_bit in the custom CNN to the precision supported by Brevitas
 
         self.min_v_w = - 2 ** (self.weight_bit - 1) + 1
@@ -252,24 +250,23 @@ class quant_brevitas_mini_resnet(nn.Module):
 
         self.alpha_coeff = 123.0  ### controllare alpha values...
 
-        self.identity = qnn.QuantIdentity(bit_width=self.act_bit, return_quant_tensor=True)
+        self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=Int8ActPerTensorFloat)
 
         self.conv2D_1 = qnn.QuantConv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
-        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(1,1), padding=1, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
-        self.skip1 = qnn.QuantMaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1, return_quant_tensor=True)
-        self.drop_1 = qnn.QuantDropout(0.2, return_quant_tensor=True)
-        self.conv2D_3 = qnn.QuantConv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=False, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
-        self.conv2D_4 = qnn.QuantConv2d(16,16,kernel_size=(3,3), stride=(1,1), padding=1, bias=False, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
-        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=False, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.skip1 = qnn.QuantMaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2, return_quant_tensor=True)
+        self.conv2D_3 = qnn.QuantConv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.conv2D_4 = qnn.QuantConv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.skip2 = qnn.QuantMaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1, return_quant_tensor=True)
         self.act_1 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
         self.act_2 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
         self.act_3 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
         self.act_4 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
         self.act_5 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
-        self.avgpool = qnn.QuantAvgPool2d(kernel_size=(4,4), stride=(3,3), padding=0, return_quant_tensor=True)
+        self.avgpool = qnn.QuantAvgPool2d(kernel_size=(4,4), stride=(1,1), padding=0, return_quant_tensor=True)
         self.flatten = nn.Flatten()
-        self.drop_2 = qnn.QuantDropout(0.2, return_quant_tensor=True)
-        self.linear = qnn.QuantLinear(1024,10, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=False) ### L'OUTPUT DEVE ESSERE USATO PER IL CALCOLO DELLA LOSS, DEVE RITORNARE CMQ UN QUANTIZED???
+        self.linear = qnn.QuantLinear(64,10, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=False) ### L'OUTPUT DEVE ESSERE USATO PER IL CALCOLO DELLA LOSS, DEVE RITORNARE CMQ UN QUANTIZED???
                                                                                                                                 ### provare se è richiesto return_quant_tensor=True o False..
         
         nn.init.kaiming_normal_(self.conv2D_1.weight)
@@ -287,9 +284,8 @@ class quant_brevitas_mini_resnet(nn.Module):
         out = self.conv2D_2(out)
         out = out + x_skip1
         out = self.act_2(out)
-        out = self.drop_1(out)
         #bottleneck res connection (3 layer)
-        x_skip2 = out
+        x_skip2 = self.skip2(out)
         out = self.conv2D_3(out)
         out = self.act_3(out)
         out = self.conv2D_4(out)
@@ -301,6 +297,5 @@ class quant_brevitas_mini_resnet(nn.Module):
         out = self.avgpool(out)
         #flatten + dropout + fully connected (1 layer)
         out = self.flatten(out)
-        out = self.drop_2(out)
         out = self.linear(out)
         return out
