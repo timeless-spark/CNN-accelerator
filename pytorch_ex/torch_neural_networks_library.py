@@ -148,20 +148,23 @@ class nano_resnet(nn.Module):
 class mini_resnet(nn.Module):
     def __init__(self):
         super(mini_resnet, self).__init__()
+        ### 28
         self.conv2D_1 = nn.Conv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True)
-        #self.downS_1 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
-        self.conv2D_2 = nn.Conv2d(32,64,kernel_size=(3,3), stride=(1,1), padding=1, bias=True)
-        self.skip1 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        ### 14
+        self.conv2D_2 = nn.Conv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True)
+        ### 7
+        self.skip1 = nn.MaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2)
         self.conv2D_3 = nn.Conv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True)
-        self.conv2D_4 = nn.Conv2d(16,16,kernel_size=(3,3), stride=(1,1), padding=1, bias=True)
-        #self.downS_2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        self.conv2D_4 = nn.Conv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True)
+        ### 4
         self.conv2D_5 = nn.Conv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True)
-        #self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+        self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+
         self.act = nn.ReLU()
-        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
+        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
+        ### 1
         self.flatten = nn.Flatten()
-        self.drop = nn.Dropout(0.2)
-        self.linear = nn.Linear(1024,10)
+        self.linear = nn.Linear(64,10)
 
         torch.nn.init.kaiming_normal_(self.conv2D_1.weight)
         torch.nn.init.kaiming_normal_(self.conv2D_2.weight)
@@ -175,19 +178,15 @@ class mini_resnet(nn.Module):
         x_skip1 = self.skip1(x)
         out = self.conv2D_1(x)
         out = self.act(out)
-        #out = self.downS_1(out)
         out = self.conv2D_2(out)
         out = out + x_skip1
         out = self.act(out)
-        out = self.drop(out)
         #bottleneck res connection (3 layer)
-        #x_skip2 = self.skip2(out)
-        x_skip2 = out
+        x_skip2 = self.skip2(out)
         out = self.conv2D_3(out)
         out = self.act(out)
         out = self.conv2D_4(out)
         out = self.act(out)
-        #out = self.downS_2(out)
         out = self.conv2D_5(out)
         out = out + x_skip2
         out = self.act(out)
@@ -195,7 +194,6 @@ class mini_resnet(nn.Module):
         out = self.avgpool(out)
         #flatten + dropout + fully connected (1 layer)
         out = self.flatten(out)
-        out = self.drop(out)
         out = self.linear(out)
         return out
 

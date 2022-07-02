@@ -266,8 +266,7 @@ class quant_brevitas_mini_resnet(nn.Module):
         self.act_5 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
         self.avgpool = qnn.QuantAvgPool2d(kernel_size=(4,4), stride=(1,1), padding=0, return_quant_tensor=True)
         self.flatten = nn.Flatten()
-        self.linear = qnn.QuantLinear(64,10, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=False) ### L'OUTPUT DEVE ESSERE USATO PER IL CALCOLO DELLA LOSS, DEVE RITORNARE CMQ UN QUANTIZED???
-                                                                                                                                ### provare se è richiesto return_quant_tensor=True o False..
+        self.linear = qnn.QuantLinear(64,10, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
         
         nn.init.kaiming_normal_(self.conv2D_1.weight)
         nn.init.kaiming_normal_(self.conv2D_2.weight)
