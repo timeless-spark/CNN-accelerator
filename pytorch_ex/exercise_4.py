@@ -69,9 +69,10 @@ import torch
 from torch import nn
 import quantization as cs
 import brevitas.nn as qnn
-from brevitas.quant import Int8Bias as BiasQuant, Uint8ActPerTensorFloat, Int8ActPerTensorFloat
+from brevitas.quant.scaled_int import Int8Bias, Int16Bias, Int32Bias, Int8WeightPerTensorFloat, Uint8ActPerTensorFloat, Int8ActPerTensorFloat
 from torch.autograd import Function
 import torch.nn.functional as F
+from brevitas.core.scaling import ScalingImplType
 
 # TODO: use this example class to implement the quantized version of the CNNs you wrote for fashion MNIST and CIFAR10.
 #  Remember: only the fashion MNIST CNN will be ported to FINN
@@ -132,7 +133,7 @@ class Exercise4_placeholder_brevitas(nn.Module):
 
         self.quant_inp = qnn.QuantIdentity(bit_width=self.act_bit, return_quant_tensor=True)
         self.conv = qnn.QuantConv2d(in_channels=1, out_channels=32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1),
-                                    weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+                                    weight_bit_width=self.weight_bit, bias_quant=Int8Bias, return_quant_tensor=True, weight_scaling_impl_type=ScalingImplType.CONST)
 
         # TODO: in order to use efficient and high accuracy quantization, PACT and DoReFa methods are used during the
         #  training process. PACT is basically a ReLu with a learnable clipping parameter. You should implement a custom
@@ -142,7 +143,7 @@ class Exercise4_placeholder_brevitas(nn.Module):
 
         # TODO: check the BiasQuant options, see what is the supported precision for the bias.
         self.dense = qnn.QuantLinear(in_features=32, out_features=10, bias=True, weight_bit_width=self.weight_bit,
-                                     bias_quant=BiasQuant, return_quant_tensor=True)
+                                     bias_quant=Int8Bias, return_quant_tensor=True)
 
     def forward(self, x):
         out = self.quant_inp(x)
@@ -152,6 +153,10 @@ class Exercise4_placeholder_brevitas(nn.Module):
         out = self.quant_inp(out)
         out = self.dense(out)
         return out
+
+#-------------------------------------------------------------------
+#-------------------- DA QUI È NOSTRO ------------------------------
+#-------------------------------------------------------------------
 
 ### ex2_b custom
 class quant_custom_mini_resnet(nn.Module):
@@ -224,11 +229,11 @@ class quant_custom_mini_resnet(nn.Module):
 
 ### my quant_reLU
 class PACT_QuantReLU(nn.Module):
-    def __init__(self, act_width, alpha=10.0):
+    def __init__(self, alpha=10.0):
         super(PACT_QuantReLU, self).__init__()
         self.alpha = nn.Parameter(torch.tensor(alpha))
         
-        self.relu = qnn.QuantReLU(act_bit_width=act_width, return_quant_tensor=True)
+        self.relu = qnn.QuantReLU(return_quant_tensor=True)
 
     def forward(self, x):
         out = torch.clamp(x, min=0, max=self.alpha.item())
@@ -250,23 +255,25 @@ class quant_brevitas_mini_resnet(nn.Module):
 
         self.alpha_coeff = 123.0  ### controllare alpha values...
 
-        self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=Int8ActPerTensorFloat)
+        self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=Uint8ActPerTensorFloat)
 
-        self.conv2D_1 = qnn.QuantConv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
-        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.conv2D_1 = qnn.QuantConv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, output_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
         self.skip1 = qnn.QuantMaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2, return_quant_tensor=True)
-        self.conv2D_3 = qnn.QuantConv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
-        self.conv2D_4 = qnn.QuantConv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
-        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.quant_ID_1 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.conv2D_2.output_quant)
+        self.conv2D_3 = qnn.QuantConv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.conv2D_4 = qnn.QuantConv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, bias_quant=Int16Bias, output_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
         self.skip2 = qnn.QuantMaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1, return_quant_tensor=True)
-        self.act_1 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
-        self.act_2 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
-        self.act_3 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
-        self.act_4 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
-        self.act_5 = PACT_QuantReLU(act_width=self.act_bit,  alpha=self.alpha_coeff)
+        self.quant_ID_2 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.conv2D_5.output_quant)
+        self.act_1 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_2 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_3 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_4 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_5 = PACT_QuantReLU(alpha=self.alpha_coeff)
         self.avgpool = qnn.QuantAvgPool2d(kernel_size=(4,4), stride=(1,1), padding=0, return_quant_tensor=True)
         self.flatten = nn.Flatten()
-        self.linear = qnn.QuantLinear(64,10, bias=True, weight_bit_width=self.weight_bit, bias_quant=BiasQuant, return_quant_tensor=True)
+        self.linear = qnn.QuantLinear(64,10, bias=True, bias_quant=Int16Bias, return_quant_tensor=False)
         
         nn.init.kaiming_normal_(self.conv2D_1.weight)
         nn.init.kaiming_normal_(self.conv2D_2.weight)
@@ -278,6 +285,7 @@ class quant_brevitas_mini_resnet(nn.Module):
     def forward(self, x):
         out = self.identity(x)
         x_skip1 = self.skip1(out)
+        x_skip1 = self.quant_ID_1(x_skip1)
         out = self.conv2D_1(out)
         out = self.act_1(out)
         out = self.conv2D_2(out)
@@ -285,6 +293,7 @@ class quant_brevitas_mini_resnet(nn.Module):
         out = self.act_2(out)
         #bottleneck res connection (3 layer)
         x_skip2 = self.skip2(out)
+        x_skip2 = self.quant_ID_2(x_skip2)
         out = self.conv2D_3(out)
         out = self.act_3(out)
         out = self.conv2D_4(out)

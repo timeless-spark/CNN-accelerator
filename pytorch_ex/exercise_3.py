@@ -169,11 +169,11 @@ def test(dataloader, model, loss_fn):
 
 ###training parameters
 batch_size = 256
-lr = 1e-2
-L2_lambda = 5e-8
+lr = 8e-3
+L2_lambda = 5e-6
 wd = L2_lambda/lr
-epochs = 200
-opt_mil = [40,80,120,160]
+epochs = 60
+opt_mil = [30,45,55]
 
 best_correct = 0
 best_model = []
@@ -204,7 +204,7 @@ for mod in model.modules():
         params += list(mod.parameters())
 '''
 optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
-scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opt_mil, gamma=0.1, verbose=True)
+scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opt_mil, gamma=0.2, verbose=True)
 #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=1, threshold=0.0001, threshold_mode='abs')
 
 mil_index = 0

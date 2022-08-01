@@ -14,7 +14,6 @@ import brevitas.config
 
 brevitas.config.IGNORE_MISSING_KEYS=True
 
-
 Path("./runs/exercise_4_FashionMNIST").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
 
 writer = SummaryWriter('runs/exercise_FashionMNIST')
@@ -29,9 +28,9 @@ best_workers = 2
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
-device = "cpu"
+#device = "cpu"
 
-model = quant_custom_mini_resnet()
+model = quant_brevitas_mini_resnet()
 prova = model.quant_method
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 
@@ -88,12 +87,12 @@ batch_size = [32]
 lr = 1e-3
 epochs = 10
 best_correct = 0
-Train = False
+Train = True
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 print("Use $ tensorboard --logdir=runs/exercise_FashionMNIST to access training statistics")
 if Train == True:
     for batch in batch_size:
-        model = quant_custom_mini_resnet()
+        model = quant_brevitas_mini_resnet()
         model.to(device)
 
         train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
@@ -158,7 +157,7 @@ test_dataloader = DataLoader(test_data, batch_size=32, shuffle=True, num_workers
 
 ###switch to brevitas
 model = quant_brevitas_mini_resnet()
-brevitas_state_dict = torch.load("./saved_models/brevitas.pth")["model_state_dict"]
+#brevitas_state_dict = torch.load("./saved_models/brevitas.pth")["model_state_dict"]
 min_v = model.min_v_w
 max_v = model.max_v_w
 quant_method = model.quant_method

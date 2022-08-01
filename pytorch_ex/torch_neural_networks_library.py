@@ -458,8 +458,6 @@ def isaResnet_14():
     model = ResNet([Bottleneck, Bottleneck, ReducedBlock], [1, 1, 2], default_res=True)
     return model
 
-
-
 ### resnet model with bottleneck:
 #   - 25 conv layers
 #   - 25 bn layers
@@ -493,13 +491,13 @@ class ex3ResNet(nn.Module):
         self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
 
-        ### 16 -> 8
-        self.res1_1 = ResidualBlock(in_channels=32, out_channels=32, bias=False, block_type="Residual33")
-        self.res1_2 = ResidualBlock(in_channels=32, out_channels=64, halve_resolution=True, bias=False, block_type="Residual33", squeeze_and_excite=True, SE_ratio=2)
+        ### 16 -> 16
+        self.res1_1 = ResidualBlock(in_channels=32, int_channels=32, out_channels=32, bias=False, block_type="Residual131")
+        self.res1_2 = ResidualBlock(in_channels=32, int_channels=32, out_channels=64, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=2)
 
-        ### 8 -> 8
+        ### 16 -> 8
         self.res2_1 = ResidualBlock(in_channels=64, int_channels=16, out_channels=64, bias=False, block_type="Residual131")
-        self.res2_2 = ResidualBlock(in_channels=64, int_channels=16, out_channels=128, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=2)
+        self.res2_2 = ResidualBlock(in_channels=64, int_channels=16, out_channels=128, halve_resolution=True, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=4)
 
         ### 8 -> 4
         self.res3_1 = ResidualBlock(in_channels=128, int_channels=32, out_channels=128, bias=False, block_type="Residual131")
