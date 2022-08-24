@@ -6,11 +6,15 @@ from torchvision import datasets
 from torchvision.transforms import transforms
 import numpy as np
 from tqdm import tqdm
-from exercise_4 import quant_custom_mini_resnet, quant_brevitas_mini_resnet, PACT_QuantReLU
+from exercise_4 import dummyModel, quant_custom_mini_resnet, quant_brevitas_mini_resnet, PACT_QuantReLU
 import quantization as cs
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 import brevitas.config
+from brevitas.export.onnx.finn.manager import FINNManager
+from brevitas.export.onnx.generic.manager import BrevitasONNXManager
+import brevitas.nn as qnn
+from brevitas.quant_tensor import QuantTensor 
 
 brevitas.config.IGNORE_MISSING_KEYS=True
 
@@ -24,14 +28,15 @@ transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize
 training_data, validation_data = random_split(datasets.FashionMNIST(root="data", train=True, download=True, transform=transform_train), [50000, 10000])
 test_data = datasets.FashionMNIST(root="data", train=False, download=True, transform=transform_test)
 
+FINN_save = True
 best_workers = 2
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu" #"cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 #device = "cpu"
 
 model = quant_brevitas_mini_resnet()
-prova = model.quant_method
+#prova = model.quant_method
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 
 params = sum([np.prod(p.size()) for p in model_parameters])
@@ -40,7 +45,7 @@ print("this model has ", params, " parameters")
 print("total weight memory is %.4f MB" %(memory))
 
 #loss_fn = nn.CrossEntropyLoss()
-loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1.,0.5,1.1,0.55,1.,0.5,2.5,0.5,0.5,0.5]).cuda())
+loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1.,0.5,1.1,0.55,1.,0.5,2.5,0.5,0.5,0.5]))
 
 def train(dataloader, model, loss_fn, optimizer, epoch):
     size = len(dataloader.dataset)
@@ -85,9 +90,9 @@ def test(dataloader, model, loss_fn):
 
 batch_size = [32]
 lr = 1e-3
-epochs = 10
+epochs = 1
 best_correct = 0
-Train = True
+Train = False
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 print("Use $ tensorboard --logdir=runs/exercise_FashionMNIST to access training statistics")
 if Train == True:
@@ -95,9 +100,9 @@ if Train == True:
         model = quant_brevitas_mini_resnet()
         model.to(device)
 
-        train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
-        validation_dataloader = DataLoader(validation_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
-        test_dataloader = DataLoader(test_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+        train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
+        validation_dataloader = DataLoader(validation_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
+        test_dataloader = DataLoader(test_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
         
         params = model.parameters()
         '''
@@ -147,14 +152,17 @@ if Train == True:
                 }, "./saved_models/exercise4FashionMNIST.pth")
         #break
 
+model = dummyModel()
+#model = dummyModel()
+
 writer.close()
 classes = ('T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot')
 
 correct_pred = {classname: 0 for classname in classes}
 total_pred = {classname: 0 for classname in classes}
 
-test_dataloader = DataLoader(test_data, batch_size=32, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
-
+test_dataloader = DataLoader(test_data, batch_size=32, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
+"""
 ###switch to brevitas
 model = quant_brevitas_mini_resnet()
 #brevitas_state_dict = torch.load("./saved_models/brevitas.pth")["model_state_dict"]
@@ -200,3 +208,55 @@ for classname, correct_count in correct_pred.items():
 lowest_class_accuracy = min_correct[1]
 
 print("Worst class accuracy is %.4f for class %s" %(min_correct[1], min_correct[0]))
+"""
+if FINN_save:
+    #if dataset_type == 'FashionMNIST':
+    in_tensor = (1, 1, 28, 28)
+    input_qt = np.random.randint(0, 255, in_tensor).astype(np.float32)
+    #elif dataset_type == 'CIFAR10':
+    #    in_tensor = (1, 3, 32, 32)
+    #else:
+    #    exit("invalid dataset")
+FINNManager.export(model.to("cpu"), export_path="./FINN_export_dummy/" + "FashionMNISTfinn.onnx", input_shape=in_tensor)#, input_t = QuantTensor(torch.from_numpy(input_qt), signed = False, scale=torch.tensor(1.0), bit_width=torch.tensor(8.0)))
+BrevitasONNXManager.export(model.cpu(), export_path="./FINN_export_dummy/" + "FashionMNISTbrevitas.onnx", input_shape=in_tensor)#, input_t = QuantTensor(torch.from_numpy(input_qt), signed = False, scale=torch.tensor(1.0), bit_width=torch.tensor(8.0)))
+print("Succesfully written FINN export files!")
+
+
+"""
+In this last exercise you will port the CNN exported with Brevitas to FINN on custom accelerator implemented on a
+ZCU104 development board. Due to limitations on the FINN version made available to the public by Xilinx and time
+constraint of the special project, you will only port the fashion MNIST model to FPGA.
+
+FINN uses PYNQ to deploy the bitstream to the FPGA, you can read more information on PYNQ here:
+https://pynq.readthedocs.io/en/latest/index.html
+More information on our specific development board can be found here.
+https://pynq.readthedocs.io/en/latest/getting_started/zcu104_setup.html
+
+For this exercise you should have already implemented, trained and exported the CNN model in FINN format.
+The Vivado 2020.1 suite, FINN docker and ZCU104 development board that are required to complete this task have been
+prepared and tested previously. You should use the remote server during all the design and deployment phases of this
+exercise. Check the telegram channel for login instructions, each student has its own home directory and credentials.
+The IP name of the pynq board is pynq-zcu104, IP address is 192.168.166.58. You can connect to this IP only while using
+the university WiFi/Ethernet. The same thing applies to the server with all the tools and necessary computing resources.
+Therefore, you can only complete this exercise while being at the university.
+Since you will not have physical access to the server, you will need to connect with the following command from a linux
+machine ssh -X <your username>@pc-lse-1861.polito.it in order to use GUI applications.
+Otherwise, if you are on windows, you should use X2GO or Mobaxterm. With Mobaxterm you should be able to work also when
+you are not on university ground, as it supports ssh tunnelling.
+
+Assignment:
+- Read the FINN documentation before writing any code or executing the notebooks. If any problem occurs during the
+  execution of the cells inside the jupyter notebooks, it is probably because of some wrong configuration done with the
+  environment variables. https://finn.readthedocs.io/en/latest/getting_started.html#quickstart
+- Read and understand the FINN tutorials, you can launch them using the command "./run-docker.sh notebook" inside the
+  FINN folder in /home/tools/FINN .
+  A summary of what is done in the tutorials can be found here: https://finn.readthedocs.io/en/latest/tutorials.html
+- For any problems, first check the FAQ https://finn.readthedocs.io/en/latest/faq.html, then the official GitHub
+  repository discussion page https://github.com/Xilinx/finn/discussions. For Brevitas issue please refer to its own
+  gitter https://gitter.im/xilinx-brevitas/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge
+- After you have completed all tutorials, follow the instructions of /end2end_example/cybersecurity tutorials to deploy,
+  validate and extract hardware metrics of your CNN model running on our ZCU104 development board.
+  To complete this exercise you have to provide the hardware metrics of your model as presented at the end of the last
+  tutorial, i.e., end2end_example/cybersecurity/3-build-accelerator-with-finn.ipynb
+- In the final report you will have to include the code of the jupiter notebooks that you modified to deploy the CNN.
+"""

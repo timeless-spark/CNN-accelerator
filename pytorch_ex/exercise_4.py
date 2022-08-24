@@ -244,36 +244,35 @@ class PACT_QuantReLU(nn.Module):
 class quant_brevitas_mini_resnet(nn.Module):
     def __init__(self):
         super(quant_brevitas_mini_resnet, self).__init__()
+        
         self.weight_bit = 8  # TODO: check the precision supported by Brevitas and the FINN engine
         self.act_bit = 8   # TODO: check the precision supported by Brevitas and the FINN engine
         self.bias_bit = 16  # TODO: notice how the Bias quantization is fixed in Brevitas. Which values can use use? -> WHATEVER AS FAR AS YOU SAY TO LOOK AT THE DOCS..!!
         # TODO: adjust the bias_bit in the custom CNN to the precision supported by Brevitas
-
         self.min_v_w = - 2 ** (self.weight_bit - 1) + 1
         self.max_v_w = 2 ** (self.weight_bit - 1) - 1
         self.quant_method = 'scale'
-
         self.alpha_coeff = 123.0  ### controllare alpha values...
-
-        self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=Uint8ActPerTensorFloat)
+        """
+        self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=Int8ActPerTensorFloat)
 
         self.conv2D_1 = qnn.QuantConv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
-        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, output_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
+        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)#, output_quant=Uint8ActPerTensorFloat)
         self.skip1 = qnn.QuantMaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2, return_quant_tensor=True)
         self.quant_ID_1 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.conv2D_2.output_quant)
         self.conv2D_3 = qnn.QuantConv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
         self.conv2D_4 = qnn.QuantConv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
-        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, bias_quant=Int16Bias, output_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
+        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, bias_quant=Int16Bias, return_quant_tensor=True)#, output_quant=Uint8ActPerTensorFloat)
         self.skip2 = qnn.QuantMaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1, return_quant_tensor=True)
         self.quant_ID_2 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.conv2D_5.output_quant)
-        self.act_1 = PACT_QuantReLU(alpha=self.alpha_coeff)
-        self.act_2 = PACT_QuantReLU(alpha=self.alpha_coeff)
-        self.act_3 = PACT_QuantReLU(alpha=self.alpha_coeff)
-        self.act_4 = PACT_QuantReLU(alpha=self.alpha_coeff)
-        self.act_5 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_1 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_2 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_3 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_4 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_5 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
         self.avgpool = qnn.QuantAvgPool2d(kernel_size=(4,4), stride=(1,1), padding=0, return_quant_tensor=True)
         self.flatten = nn.Flatten()
-        self.linear = qnn.QuantLinear(64,10, bias=True, bias_quant=Int16Bias, return_quant_tensor=False)
+        self.linear = qnn.QuantLinear(64,10, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
         
         nn.init.kaiming_normal_(self.conv2D_1.weight)
         nn.init.kaiming_normal_(self.conv2D_2.weight)
@@ -281,7 +280,64 @@ class quant_brevitas_mini_resnet(nn.Module):
         nn.init.kaiming_normal_(self.conv2D_4.weight)
         nn.init.kaiming_normal_(self.conv2D_5.weight)
         nn.init.kaiming_normal_(self.linear.weight)
+        """
 
+        self.quantizer_1 = Uint8ActPerTensorFloat
+        self.quantizer_2 = Uint8ActPerTensorFloat
+
+        self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=Uint8ActPerTensorFloat)
+
+        self.conv2D_1 = qnn.QuantConv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.quant_ID_1 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.quantizer_1)
+        self.skip1 = qnn.QuantMaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2, return_quant_tensor=True)
+        self.quant_ID_2 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.quantizer_1)
+        self.conv2D_3 = qnn.QuantConv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.conv2D_4 = qnn.QuantConv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.quant_ID_3 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.quantizer_2)
+        self.skip2 = qnn.QuantMaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1, return_quant_tensor=True)
+        self.quant_ID_4 = self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=self.quantizer_2)
+        self.act_1 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_2 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_3 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_4 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_5 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.avgpool = qnn.QuantAvgPool2d(kernel_size=(4,4), stride=(1,1), padding=0, return_quant_tensor=True)
+        self.flatten = nn.Flatten()
+        self.linear = qnn.QuantLinear(64,10, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+
+        nn.init.kaiming_normal_(self.conv2D_1.weight)
+        nn.init.kaiming_normal_(self.conv2D_2.weight)
+        nn.init.kaiming_normal_(self.conv2D_3.weight)
+        nn.init.kaiming_normal_(self.conv2D_4.weight)
+        nn.init.kaiming_normal_(self.conv2D_5.weight)
+        nn.init.kaiming_normal_(self.linear.weight)
+
+
+        """
+        self.identity = qnn.QuantIdentity(return_quant_tensor=True)
+
+        self.conv2D_1 = qnn.QuantConv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, return_quant_tensor=True)
+        self.conv2D_2 = qnn.QuantConv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, return_quant_tensor=True)#, output_quant=Uint8ActPerTensorFloat)
+        self.skip1 = qnn.QuantMaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2, return_quant_tensor=True)
+        self.quant_ID_1 = self.identity = qnn.QuantIdentity(return_quant_tensor=True)
+        self.conv2D_3 = qnn.QuantConv2d(64,16, kernel_size=(1,1), stride=(1,1), bias=True, return_quant_tensor=True)
+        self.conv2D_4 = qnn.QuantConv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, return_quant_tensor=True)
+        self.conv2D_5 = qnn.QuantConv2d(16,64,kernel_size=(1,1), stride=(1,1), bias=True, return_quant_tensor=True)#, output_quant=Uint8ActPerTensorFloat)
+        self.skip2 = qnn.QuantMaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1, return_quant_tensor=True)
+        self.quant_ID_2 = self.identity = qnn.QuantIdentity(return_quant_tensor=True)
+        self.act_1 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_2 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_3 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_4 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.act_5 = qnn.QuantReLU(return_quant_tensor=True)#PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.avgpool = qnn.QuantAvgPool2d(kernel_size=(4,4), stride=(1,1), padding=0, return_quant_tensor=True)
+        self.flatten = nn.Flatten()
+        self.linear = qnn.QuantLinear(3872,10, bias=True, return_quant_tensor=True)        
+        """
+
+    """
     def forward(self, x):
         out = self.identity(x)
         x_skip1 = self.skip1(out)
@@ -304,6 +360,56 @@ class quant_brevitas_mini_resnet(nn.Module):
         #downsample
         out = self.avgpool(out)
         #flatten + dropout + fully connected (1 layer)
+        out = self.flatten(out)
+        out = self.linear(out)
+        return out
+    """
+    def forward(self, x):
+        out = self.identity(x)
+        x_skip1 = self.skip1(out)
+        x_skip1 = self.quant_ID_2(x_skip1)
+        out = self.conv2D_1(out)
+        out = self.act_1(out)
+        out = self.conv2D_2(out)
+        out = self.quant_ID_1(out)
+        out = out + x_skip1
+        out = self.act_2(out)
+        #bottleneck res connection (3 layer)
+        x_skip2 = self.skip2(out)
+        x_skip2 = self.quant_ID_4(x_skip2)
+        out = self.conv2D_3(out)
+        out = self.act_3(out)
+        out = self.conv2D_4(out)
+        out = self.act_4(out)
+        out = self.conv2D_5(out)
+        out = self.quant_ID_3(out)
+        out = out + x_skip2
+        out = self.act_5(out)
+        #downsample
+        out = self.avgpool(out)
+        #flatten + dropout + fully connected (1 layer)
+        out = self.flatten(out)
+        out = self.linear(out)
+        return out        
+    
+class dummyModel(nn.Module):
+    def __init__(self):
+        super(dummyModel, self).__init__()
+
+        self.alpha_coeff = 123.0  ### controllare alpha values...
+
+        self.identity = qnn.QuantIdentity(return_quant_tensor=True, act_quant=Uint8ActPerTensorFloat)
+        self.conv2D_1 = qnn.QuantConv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+        self.act_1 = PACT_QuantReLU(alpha=self.alpha_coeff)
+        self.avgpool = qnn.QuantAvgPool2d(kernel_size=(7,7), stride=(7,7), padding=0, return_quant_tensor=True)
+        self.flatten = nn.Flatten()        
+        self.linear = qnn.QuantLinear(128,10, bias=True, bias_quant=Int16Bias, return_quant_tensor=True)
+
+    def forward(self, x):
+        out = self.identity(x)
+        out = self.conv2D_1(out)
+        out = self.act_1(out)
+        out = self.avgpool(out)
         out = self.flatten(out)
         out = self.linear(out)
         return out
