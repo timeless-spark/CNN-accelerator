@@ -282,15 +282,15 @@ class ResNet(nn.Module):
             else:
                 res_conn_type.append(self._make_layer_reduced_res)
         
+        ### 32 -> 32
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=5, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
         ### 32 -> 16
-        self.conv1 = nn.Conv2d(3, 48, kernel_size=5, stride=2, padding=2, bias=False)
-        self.bn1 = nn.BatchNorm2d(48)
+        self.layer1 = res_conn_type[0](64, 64, layers[0], stride=2, drop=drop[0])
         ### 16 -> 8
-        self.layer1 = res_conn_type[0](48, 96, layers[0], stride=2, drop=drop[0])
-        ### 8 -> 8
-        self.layer2 = res_conn_type[1](96, 192, layers[1], drop=drop[1])
+        self.layer2 = res_conn_type[1](64, 128, layers[1], stride=2, drop=drop[1])
         ### 8 -> 4
-        self.layer3 = res_conn_type[2](192, 192, layers[2], stride=2, drop=drop[2])
+        self.layer3 = res_conn_type[2](128, 256, layers[2], stride=2, drop=drop[2])
         '''
         ### 8 -> 2
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
@@ -304,7 +304,7 @@ class ResNet(nn.Module):
         self.linear = nn.Linear(512, 10)
         '''
         self.dropout = nn.Dropout(drop[3])
-        self.linear = nn.Linear(128, 10)
+        self.linear = nn.Linear(256, 10)
 
         ### initialization
         for m in self.modules():
@@ -323,7 +323,7 @@ class ResNet(nn.Module):
             
     def _make_layer_conv_res(self, inplanes, planes, blocks, stride=1, drop=0):
         downsample = None
-        if inplanes != planes:
+        if stride != 1 or inplanes != planes:
             downsample = nn.Sequential(
                     conv1x1(inplanes, planes, stride),
                     nn.BatchNorm2d(planes),

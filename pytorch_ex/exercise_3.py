@@ -8,11 +8,12 @@ from tqdm import tqdm
 from torch_neural_networks_library import isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_reduced, isaResNet_50_dropout, isaResNet_98
 from pathlib import Path
 
+#base_path = "../../drive/MyDrive/"
 base_path = "./"
 
 Path(base_path + "saved_models").mkdir(parents=True, exist_ok=True)
 
-initialize_dict = False
+initialize_dict = True
 
 transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)), transforms.RandomResizedCrop(size=(32,32), scale=(0.8, 1.0)), transforms.RandomHorizontalFlip(0.5)])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
@@ -23,7 +24,7 @@ best_workers = 2
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
-#device = "cpu"
+device = "cpu"
 
 model_list = [isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_reduced, isaResNet_50_dropout, isaResNet_98]
 '''
@@ -135,6 +136,7 @@ for func in model_list:
     model, name = func()
     if tr_dict[name]["epoch_done"] < epochs:
         model.load_state_dict(tr_dict[name]["model_state_dict"])
+        model.to(device)
         params = return_model_params(model)
         optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
         optimizer.load_state_dict(tr_dict[name]["optimizer_state_dict"])
@@ -143,7 +145,7 @@ for func in model_list:
 
         for t in tqdm(range(epochs)):
             print(f"Epoch {t+1}\n-------------------------------")
-            loss = train(train_dataloader, model, loss_fn, optimizer, t, tr_dict[name]["training_loss"])
+            loss = train(train_dataloader, model, loss_fn, optimizer, tr_dict[name]["training_loss"])
             current_correct = test(validation_dataloader, model, loss_fn)
             scheduler.step()
             tr_dict[name]["validation_acc"].append(current_correct)
@@ -168,6 +170,7 @@ classes = ('airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'hors
 for func in model_list:
     model, name = func()
     model.load_state_dict(tr_dict[name]["model_state_dict"])
+    model.to(device)
 
     #training loss
     step = len(tr_dict[name]["training_loss"]) / epochs
