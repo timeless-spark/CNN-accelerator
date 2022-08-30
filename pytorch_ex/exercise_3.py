@@ -1,5 +1,3 @@
-from email.mime import base
-from telnetlib import NOP
 import torch, torchvision, copy
 from torch import nn
 from torch.utils.data import DataLoader, random_split
