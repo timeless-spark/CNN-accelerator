@@ -1,3 +1,4 @@
+from email.mime import base
 from telnetlib import NOP
 import torch, torchvision, copy
 from torch import nn
@@ -9,9 +10,11 @@ from tqdm import tqdm
 from torch_neural_networks_library import isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_reduced, isaResNet_50_dropout, isaResNet_98
 from pathlib import Path
 
-Path("./saved_models").mkdir(parents=True, exist_ok=True)
+base_path = "./"
 
-initialize_dict = True
+Path(base_path + "saved_models").mkdir(parents=True, exist_ok=True)
+
+initialize_dict = False
 
 transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)), transforms.RandomResizedCrop(size=(32,32), scale=(0.8, 1.0)), transforms.RandomHorizontalFlip(0.5)])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
@@ -122,9 +125,9 @@ if initialize_dict:
             "training_loss": [],
             "validation_acc": []
         }
-    torch.save(tr_dict, "./saved_models/exercise3.pth")
+    torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
 
-tr_dict = torch.load("./saved_models/exercise3.pth")
+tr_dict = torch.load(base_path + "saved_models/exercise3.pth")
 
 loss_fn = nn.CrossEntropyLoss()
 
@@ -152,15 +155,15 @@ for func in model_list:
             if current_correct > best_correct:
                 best_correct = current_correct
                 tr_dict[name]["model_state_dict"] = model.state_dict()
-            torch.save(tr_dict, "./saved_models/exercise3.pth")
+            torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
 
 ###-----
 
 from torch.utils.tensorboard import SummaryWriter
-Path("./runs/exercise_3").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
+Path(base_path + "runs/exercise_3").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
 
-tr_dict = torch.load("./saved_models/exercise3.pth")
-writer = SummaryWriter('runs/exercise_3')
+tr_dict = torch.load(base_path + "saved_models/exercise3.pth")
+writer = SummaryWriter(base_path + "runs/exercise_3")
 
 classes = ('airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
