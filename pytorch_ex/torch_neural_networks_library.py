@@ -1,4 +1,5 @@
 from pickle import NONE
+from re import T
 import torch
 import torch.nn.functional as f
 from torch import nn
@@ -269,91 +270,27 @@ class Bottleneck(nn.Module):
 
         return out
 
-class ReducedBlock(nn.Module):
-    def __init__(
-        self,
-        inplanes: int,
-        planes: int,
-        stride: int = 1,
-        downsample: Optional[nn.Module] = None,
-        dropout: Optional[nn.Module] = None,
-    ) -> None:
-        super().__init__()
-        norm_layer = nn.BatchNorm2d
-
-        self.concat = None
-        self.maxpool = None
-        if inplanes != planes:
-            self.concat_check = True
-            self.concat = concatLayer()
-        else:
-            self.concat_check = False
-        if stride != 1:
-            self.stride_check = True
-            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=stride, padding=1)
-        else:
-            self.stride_check = False
-
-        width = int(inplanes / 4)
-        
-        self.conv1 = conv1x1(planes, width)
-        self.bn1 = norm_layer(width)
-        self.conv2 = conv1x1(width, width)
-        self.bn2 = norm_layer(width)
-        self.conv3 = conv1x1(width, planes)
-        self.bn3 = norm_layer(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.drop = dropout
-
-    def forward(self, x: Tensor) -> Tensor:
-        if self.stride_check:
-            x = self.maxpool(x)
-        if self.concat_check:
-            x = self.concat(x)
-        
-        identity = x
-
-        out = self.conv1(x)
-        if self.drop is not None:
-            out = self.drop(out)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        if self.drop is not None:
-            out = self.drop(out)
-        out = self.bn2(out)
-        out = self.relu(out)
-
-        out = self.conv3(out)
-        if self.drop is not None:
-            out = self.drop(out)
-        out = self.bn3(out)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
 ### modified from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 class ResNet(nn.Module):
-    def __init__(self, blocks, layers, default_res, drop=[0, 0, 0]):
+    def __init__(self, blocks_conn, layers, drop=[0, 0, 0, 0]):
         super().__init__()
 
-        if default_res:
-            self._make_layer = self._make_layer_conv_res
-        else:
-            self._make_layer = self._make_layer_direct_res
+        res_conn_type = []
+        for t in blocks_conn:
+            if t:
+                res_conn_type.append(self._make_layer_conv_res)
+            else:
+                res_conn_type.append(self._make_layer_reduced_res)
         
         ### 32 -> 16
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(3, 48, kernel_size=5, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(48)
         ### 16 -> 8
-        self.layer1 = self._make_layer(blocks[0], 64, 64, layers[0], stride=2, drop=drop[0])
+        self.layer1 = res_conn_type[0](48, 96, layers[0], stride=2, drop=drop[0])
         ### 8 -> 8
-        self.layer2 = self._make_layer(blocks[1], 64, 128, layers[1], drop=drop[1])
+        self.layer2 = res_conn_type[1](96, 192, layers[1], drop=drop[1])
         ### 8 -> 4
-        self.layer3 = self._make_layer(blocks[2], 128, 128, layers[2], stride=2, drop=drop[2])
+        self.layer3 = res_conn_type[2](192, 192, layers[2], stride=2, drop=drop[2])
         '''
         ### 8 -> 2
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
@@ -366,6 +303,7 @@ class ResNet(nn.Module):
         '''
         self.linear = nn.Linear(512, 10)
         '''
+        self.dropout = nn.Dropout(drop[3])
         self.linear = nn.Linear(128, 10)
 
         ### initialization
@@ -383,41 +321,39 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
             
-    def _make_layer_conv_res(self, block, inplanes, planes, blocks, stride=1, drop=0):
+    def _make_layer_conv_res(self, inplanes, planes, blocks, stride=1, drop=0):
         downsample = None
-        if stride != 1 :
+        if inplanes != planes:
             downsample = nn.Sequential(
                     conv1x1(inplanes, planes, stride),
                     nn.BatchNorm2d(planes),
                 )
-        elif inplanes != planes:
-            downsample = nn.Sequential(
-                    conv1x1(inplanes, planes),
-                    nn.BatchNorm2d(planes),
-                )
-        
+                
         dropout = None
         if drop != 0:
             dropout = nn.Dropout2d(drop)
 
         layers = []
         ### il primo blocco fa il downsample
-        layers.append(block(inplanes, planes, stride, downsample, dropout=dropout))
+        layers.append(Bottleneck(inplanes, planes, stride, downsample, dropout=dropout))
         for i in range(1, blocks):
-            layers.append(block(planes, planes, dropout=dropout))
+            layers.append(Bottleneck(planes, planes, dropout=dropout))
 
         return nn.Sequential(*layers)
 
-    def _make_layer_direct_res(self, block, inplanes, planes, blocks, stride=1, drop=False):
+    def _make_layer_reduced_res(self, inplanes, planes, blocks, stride=1, drop=0):
         downsample = None
         if stride != 1 :
             downsample = nn.Sequential(
                     nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
                 )
-            if inplanes != planes:
-                downsample.append(concatLayer())
         elif inplanes != planes:
-            downsample = concatLayer()
+            if downsample != None:
+                downsample.append(concatLayer())
+            else:
+                downsample = nn.Sequential(
+                    concatLayer()
+                )
 
         dropout = None
         if drop != 0:
@@ -425,10 +361,10 @@ class ResNet(nn.Module):
 
         layers = []
         ### il primo blocco fa il downsample
-        layers.append(block(inplanes, planes, stride, downsample, dropout=dropout))
+        layers.append(Bottleneck(inplanes, planes, stride, downsample, dropout=dropout))
         ### si potrebbe pensare ad una crescita dei canali graduale nei vari blocchi...
         for i in range(1, blocks):
-            layers.append(block(planes, planes, dropout=dropout))
+            layers.append(Bottleneck(planes, planes, dropout=dropout))
 
         return nn.Sequential(*layers)
 
@@ -446,6 +382,7 @@ class ResNet(nn.Module):
         
         x = self.avgpool(x)
         x = self.flatten(x)
+        x = self.dropout(x)
         x = self.linear(x)
 
         return x
@@ -454,33 +391,42 @@ class ResNet(nn.Module):
 #   - 13 conv layers
 #   - 13 bn layers
 #   - 1 fc
-def isaResnet_14():
-    model = ResNet([Bottleneck, Bottleneck, ReducedBlock], [1, 1, 2], default_res=True)
-    return model
+def isaResNet_14():
+    model = ResNet([True, True, True], [1, 1, 2], drop=[0, 0, 0, 0.2])
+    return model, "isaResNet_14"
 
 ### resnet model with bottleneck:
 #   - 25 conv layers
 #   - 25 bn layers
 #   - 1 fc
-def isaResnet_26():
-    model = ResNet([Bottleneck, Bottleneck, ReducedBlock], [2, 2, 4], default_res=True, drop=[0.2, 0, 0])
-    return model
+def isaResNet_26():
+    model = ResNet([True, True, False], [2, 2, 4], drop=[0, 0, 0, 0.2])
+    return model, "isaResNet_26"
 
 ### resnet model with bottleneck:
 #   - 49 conv layers
 #   - 49 bn layers
 #   - 1 fc
-def isaResnet_50():
-    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [4, 4, 8], default_res=False, drop=[0.2, 0.1, 0])
-    return model
+  # standard version
+def isaResNet_50():
+    model = ResNet([True, True, True], [4, 4, 8], drop=[0, 0, 0, 0.4])
+    return model, "isaResNet_50"
+  # reduced version
+def isaResNet_50_reduced():
+    model = ResNet([False, False, False], [4, 4, 8], drop=[0, 0, 0, 0.4])
+    return model, "isaResNet_50_reduced"
+  # dropout version
+def isaResNet_50_dropout():
+    model = ResNet([True, True, True], [4, 4, 8], drop=[0.4, 0.4, 0.4, 0.4])
+    return model, "isaResNet_50_dropout"
 
 ### resnet model with bottleneck:
 #   - 97 conv layers
 #   - 97 bn layers
 #   - 1 fc
-def isaResnet_98():
-    model = ResNet([Bottleneck, ReducedBlock, ReducedBlock], [8, 8, 16], default_res=False, drop=[0.4, 0.2, 0.1])
-    return model
+def isaResNet_98():
+    model = ResNet([True, False, False], [8, 8, 16], drop=[0.2, 0.2, 0.2, 0.4])
+    return model, "isaResNet_98"
 
 ###exercize_3 model for the standard exercize
 
@@ -492,8 +438,8 @@ class ex3ResNet(nn.Module):
         self.bn1 = nn.BatchNorm2d(32)
 
         ### 16 -> 16
-        self.res1_1 = ResidualBlock(in_channels=32, int_channels=32, out_channels=32, bias=False, block_type="Residual131")
-        self.res1_2 = ResidualBlock(in_channels=32, int_channels=32, out_channels=64, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=2)
+        self.res1_1 = ResidualBlock(in_channels=32, int_channels=32, out_channels=32, bias=False, block_type="Residual33")
+        self.res1_2 = ResidualBlock(in_channels=32, int_channels=32, out_channels=64, bias=False, block_type="Residual33", squeeze_and_excite=True, SE_ratio=2)
 
         ### 16 -> 8
         self.res2_1 = ResidualBlock(in_channels=64, int_channels=16, out_channels=64, bias=False, block_type="Residual131")
