@@ -2,14 +2,14 @@ import torch, torchvision, copy
 from torch import nn
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets
-from torchvision.transforms import transforms
+from torchvision.transforms import TrivialAugmentWide, transforms
 import numpy as np
 from tqdm import tqdm
 from torch_neural_networks_library import isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_reduced, isaResNet_50_dropout, isaResNet_98
 from pathlib import Path
 
-#base_path = "../../drive/MyDrive/"
-base_path = "./"
+base_path = "../../drive/MyDrive/"
+#base_path = "./"
 
 Path(base_path + "saved_models").mkdir(parents=True, exist_ok=True)
 
@@ -24,7 +24,7 @@ best_workers = 2
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
-device = "cpu"
+#device = "cpu"
 
 model_list = [isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_reduced, isaResNet_50_dropout, isaResNet_98]
 '''
@@ -72,13 +72,13 @@ def train(dataloader, model, loss_fn, optimizer, loss_list):
         loss.backward()
         optimizer.step()
 
-        if batch % 10 == 0:
+        if batch % 30 == 0:
             loss, current = loss.item(), batch * len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
             loss_list.append(loss / 100)
     return loss
 
-def test(dataloader, model, loss_fn):
+def test(dataloader, model, loss_fn, loss_list):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
@@ -91,7 +91,8 @@ def test(dataloader, model, loss_fn):
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
     test_loss /= num_batches
     correct /= size
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    loss_list.append(test_loss)
+    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f}")
     return correct
 
 ###training parameters
@@ -122,6 +123,7 @@ if initialize_dict:
             "scheduler_state_dict": scheduler.state_dict(),
             "epoch_done": 0,
             "training_loss": [],
+            "validation_loss": [],
             "validation_acc": []
         }
     torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
@@ -146,8 +148,8 @@ for func in model_list:
         for t in tqdm(range(epochs)):
             print(f"Epoch {t+1}\n-------------------------------")
             loss = train(train_dataloader, model, loss_fn, optimizer, tr_dict[name]["training_loss"])
-            current_correct = test(validation_dataloader, model, loss_fn)
-            scheduler.step()
+            current_correct = test(validation_dataloader, model, loss_fn, tr_dict[name]["validation_loss"])
+            scheduler.step(tr_dict[name]["validation_loss"][-1])
             tr_dict[name]["validation_acc"].append(current_correct)
             tr_dict[name]["epoch_done"] += 1
             tr_dict[name]["optimizer_state_dict"] = optimizer.state_dict()
@@ -156,6 +158,7 @@ for func in model_list:
                 best_correct = current_correct
                 tr_dict[name]["model_state_dict"] = model.state_dict()
             torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
+            print(f"lr: {optimizer.param_groups[0]['lr']:0.2e}\n")
 
 ###-----
 
@@ -183,6 +186,11 @@ for func in model_list:
         else:
             writer.add_scalar(name + " - training loss", val)
         i += 1
+
+    #validation loss during training
+    i = 0
+    for val in tr_dict[name]["valication_loss"]:
+        writer.add_scalar(name + " - validation loss", val, i)
 
     #validation accuracy during training
     i = 0
