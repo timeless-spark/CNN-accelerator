@@ -1,5 +1,6 @@
 from pickle import NONE
 from re import T
+import string
 import torch
 import torch.nn.functional as f
 from torch import nn
@@ -272,7 +273,7 @@ class Bottleneck(nn.Module):
 
 ### modified from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 class ResNet(nn.Module):
-    def __init__(self, blocks_conn, layers, drop=[0, 0, 0, 0]):
+    def __init__(self, blocks_conn, layers, drop=0, init=None, int_drop=[0,0,0]):
         super().__init__()
 
         res_conn_type = []
@@ -286,11 +287,11 @@ class ResNet(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=5, padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         ### 32 -> 16
-        self.layer1 = res_conn_type[0](64, 64, layers[0], stride=2, drop=drop[0])
+        self.layer1 = res_conn_type[0](64, 64, layers[0], stride=2, drop=int_drop[0])
         ### 16 -> 8
-        self.layer2 = res_conn_type[1](64, 128, layers[1], stride=2, drop=drop[1])
+        self.layer2 = res_conn_type[1](64, 128, layers[1], stride=2, drop=int_drop[1])
         ### 8 -> 4
-        self.layer3 = res_conn_type[2](128, 256, layers[2], stride=2, drop=drop[2])
+        self.layer3 = res_conn_type[2](128, 256, layers[2], stride=2, drop=int_drop[2])
         '''
         ### 8 -> 2
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
@@ -303,20 +304,20 @@ class ResNet(nn.Module):
         '''
         self.linear = nn.Linear(512, 10)
         '''
-        self.dropout = nn.Dropout(drop[3])
+        self.dropout = nn.Dropout(drop)
         self.linear = nn.Linear(256, 10)
 
         ### initialization
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                ### siccome il training è solo dei batchnorm layer provare anche altre inizializzazioni..
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                #nn.init.kaiming_uniform_(m.weight, mode='fan_out', nonlinearity='relu')
-                #nn.init.xavier_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                #nn.init.kaiming_uniform_(m.weight, mode='fan_out', nonlinearity='relu')
-                #nn.init.xavier_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                if init is not None:
+                    if init == "normal":
+                        nn.init.normal_(m.weight, std=1.0)
+                    elif init == "sparse":
+                        nn.init.sparce_(m.weight, sparsity=0.5, std=1.0)
+
+                else:
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu') 
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -392,7 +393,7 @@ class ResNet(nn.Module):
 #   - 13 bn layers
 #   - 1 fc
 def isaResNet_14():
-    model = ResNet([True, True, True], [1, 1, 2], drop=[0, 0, 0, 0.2])
+    model = ResNet([True, True, True], [1, 1, 2], drop=0.2)
     return model, "isaResNet_14"
 
 ### resnet model with bottleneck:
@@ -400,7 +401,7 @@ def isaResNet_14():
 #   - 25 bn layers
 #   - 1 fc
 def isaResNet_26():
-    model = ResNet([True, True, False], [2, 2, 4], drop=[0, 0, 0, 0.2])
+    model = ResNet([True, True, False], [2, 2, 4], drop=0.3)
     return model, "isaResNet_26"
 
 ### resnet model with bottleneck:
@@ -409,15 +410,23 @@ def isaResNet_26():
 #   - 1 fc
   # standard version
 def isaResNet_50():
-    model = ResNet([True, True, True], [4, 4, 8], drop=[0, 0, 0, 0.4])
+    model = ResNet([True, True, True], [4, 4, 8], drop=0.5)
     return model, "isaResNet_50"
   # reduced version
 def isaResNet_50_reduced():
-    model = ResNet([False, False, False], [4, 4, 8], drop=[0, 0, 0, 0.4])
+    model = ResNet([False, False, False], [4, 4, 8], drop=0.5)
     return model, "isaResNet_50_reduced"
+  # wide normal distr initialization version
+def isaResNet_50_normal():
+    model = ResNet([True, True, True], [4, 4, 8], drop=0.5, init="normal")
+    return model, "isaResNet_50_normal"
+  # sparse matrix version
+def isaResNet_50_sparse():
+    model = ResNet([True, True, True], [4, 4, 8], drop=0.5, init="sparse")
+    return model, "isaResNet_50_sparse"
   # dropout version
 def isaResNet_50_dropout():
-    model = ResNet([True, True, True], [4, 4, 8], drop=[0.4, 0.4, 0.4, 0.4])
+    model = ResNet([True, True, True], [4, 4, 8], drop=0.5, int_drop=[0.5,0.5,0.5])
     return model, "isaResNet_50_dropout"
 
 ### resnet model with bottleneck:
@@ -425,7 +434,7 @@ def isaResNet_50_dropout():
 #   - 97 bn layers
 #   - 1 fc
 def isaResNet_98():
-    model = ResNet([True, False, False], [8, 8, 16], drop=[0.2, 0.2, 0.2, 0.4])
+    model = ResNet([True, False, False], [8, 8, 16], drop=0.5, init="normal", int_drop=[0.2,0.2,0.2])
     return model, "isaResNet_98"
 
 ###exercize_3 model for the standard exercize
