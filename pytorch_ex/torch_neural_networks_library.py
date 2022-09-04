@@ -306,7 +306,7 @@ class ResNet(nn.Module):
                     if init == "normal":
                         nn.init.normal_(m.weight, std=1.0)
                     elif init == "sparse":
-                        nn.init.sparce_(m.weight, sparsity=0.5, std=1.0)
+                        nn.init.sparse_(m.weight, sparsity=0.5, std=1.0)
 
                 else:
                     nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu') 
