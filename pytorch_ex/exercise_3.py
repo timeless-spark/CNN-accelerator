@@ -26,7 +26,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 #device = "cpu"
 
-model_list = [isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_normal, isaResNet_50_sparse, isaResNet_50_reduced, isaResNet_50_dropout, isaResNet_98]
+model_list = [isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_normal, isaResNet_50_sparse, isaResNet_50_reduced, isaResNet_50_dropout]
 '''
 for model in model_list:
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -103,7 +103,7 @@ L2_lambda = 5e-8
 wd = L2_lambda/lr
 epochs = 200
 #loss_fn = nn.CrossEntropyLoss()
-loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1,1,4,4,3,2,1,1,1,1]).to(device))
+loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1.,0.8,1.25,1.25,1.25,1.2,1.2,1.,1.,1.]).to(device))
 
 train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
 validation_dataloader = DataLoader(validation_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
@@ -143,7 +143,7 @@ for func in model_list:
         params = return_model_params(model)
         optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=.8, lr=lr)
         optimizer.load_state_dict(tr_dict[name]["optimizer_state_dict"])
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
         scheduler.load_state_dict(tr_dict[name]["scheduler_state_dict"])
 
         for t in tqdm(range(epochs)):
