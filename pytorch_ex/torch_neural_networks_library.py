@@ -12,7 +12,7 @@ from layer_templates_pytorch import *
 
 import brevitas
 
-
+import numpy as np
 
 """
 edit this class to modify your neural network, try mixing Conv2d and Linear layers. See how the training time, loss and 
@@ -265,7 +265,7 @@ class Bottleneck(nn.Module):
 
 ### modified from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 class ResNet(nn.Module):
-    def __init__(self, blocks_conn, layers, drop=0, init=None):
+    def __init__(self, blocks_conn, layers, drop=0, init=None, sparse_ammount=0):
         super().__init__()
 
         res_conn_type = []
@@ -301,13 +301,25 @@ class ResNet(nn.Module):
 
         ### initialization
         for m in self.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+            if isinstance(m, nn.Conv2d):
                 if init is not None:
                     if init == "normal":
                         nn.init.normal_(m.weight, std=1.0)
                     elif init == "sparse":
-                        nn.init.sparse_(m.weight, sparsity=0.5, std=1.0)
-
+                      #PYTORCH SPARSE INIT GIVES PROBLEMS IN TRAINING SOMEHOW..
+                        #for i in range(m.weight.shape[0]):
+                        #    for j in range(m.weight.shape[1]):
+                        #        nn.init.sparse_(m.weight[i, j, :, :], sparsity=0.2, std=1.0)
+                        #        m.weight = nn.parameter.Parameter(m.weight, requires_grad=True)
+                      #'SPARSIFICATION' IS DONE BY HAND..
+                        nn.init.normal_(m.weight, std=1.0)
+                        prova = torch.from_numpy(np.random.binomial(1, 1-sparse_ammount, m.weight.shape))
+                        m.weight = nn.parameter.Parameter(m.weight * prova, requires_grad=True)
+                else:
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu') 
+            elif isinstance(m, nn.Linear):
+                if init is not None:
+                        nn.init.normal_(m.weight, std=1.0)
                 else:
                     nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu') 
             elif isinstance(m, nn.BatchNorm2d):
@@ -321,7 +333,7 @@ class ResNet(nn.Module):
                     conv1x1(inplanes, planes, stride),
                     nn.BatchNorm2d(planes),
                 )
-                
+        
         layers = []
         ### il primo blocco fa il downsample
         layers.append(Bottleneck(inplanes, planes, stride, downsample))
@@ -336,7 +348,7 @@ class ResNet(nn.Module):
             downsample = nn.Sequential(
                     nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
                 )
-        elif inplanes != planes:
+        if inplanes != planes:
             if downsample != None:
                 downsample.append(concatLayer())
             else:
@@ -346,7 +358,7 @@ class ResNet(nn.Module):
 
         layers = []
         ### il primo blocco fa il downsample
-        layers.append(Bottleneck(inplanes, planes, stride, downsample,))
+        layers.append(Bottleneck(inplanes, planes, stride, downsample))
         ### si potrebbe pensare ad una crescita dei canali graduale nei vari blocchi...
         for i in range(1, blocks):
             layers.append(Bottleneck(planes, planes))
@@ -385,7 +397,7 @@ def isaResNet_14():
 #   - 25 bn layers
 #   - 1 fc
 def isaResNet_26():
-    model = ResNet([True, True, False], [2, 2, 4])
+    model = ResNet([True, True, True], [2, 2, 4])
     return model, "isaResNet_26"
 
 ### resnet model with bottleneck:
@@ -406,7 +418,7 @@ def isaResNet_50_normal():
     return model, "isaResNet_50_normal"
   # sparse matrix version
 def isaResNet_50_sparse():
-    model = ResNet([True, True, True], [4, 4, 8], init="sparse")
+    model = ResNet([True, True, True], [4, 4, 8], init="sparse", sparse_ammount=0.5)
     return model, "isaResNet_50_sparse"
   # dropout version
 def isaResNet_50_dropout():

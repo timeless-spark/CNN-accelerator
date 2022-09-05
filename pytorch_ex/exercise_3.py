@@ -8,8 +8,8 @@ from tqdm import tqdm
 from torch_neural_networks_library import isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_normal, isaResNet_50_sparse, isaResNet_50_reduced, isaResNet_50_dropout, isaResNet_98
 from pathlib import Path
 
-base_path = "../../drive/MyDrive/"
-#base_path = "./"
+#base_path = "../../drive/MyDrive/"
+base_path = "./"
 
 Path(base_path + "saved_models").mkdir(parents=True, exist_ok=True)
 
@@ -24,9 +24,9 @@ best_workers = 2
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
-#device = "cpu"
+device = "cpu"
 
-model_list = [isaResNet_14, isaResNet_26, isaResNet_50, isaResNet_50_normal, isaResNet_50_sparse, isaResNet_50_reduced, isaResNet_50_dropout]
+model_list = [isaResNet_50, isaResNet_50_normal, isaResNet_50_sparse, isaResNet_50_reduced, isaResNet_50_dropout]
 '''
 for model in model_list:
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -148,6 +148,7 @@ for func in model_list:
 
         for t in tqdm(range(epochs)):
             print(f"Epoch {t+1}\n-------------------------------")
+            print(model.conv1.weight[0,0,:,:])
             loss = train(train_dataloader, model, loss_fn, optimizer, tr_dict[name]["training_loss"])
             current_acc = test(validation_dataloader, model, loss_fn, tr_dict[name]["validation_loss"])
             scheduler.step(tr_dict[name]["validation_loss"][-1])
