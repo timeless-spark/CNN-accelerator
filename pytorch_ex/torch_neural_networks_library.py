@@ -229,7 +229,7 @@ class Bottleneck(nn.Module):
         super().__init__()
         norm_layer = nn.BatchNorm2d
         ### strozza il bottleneck dimezzando i canali per il layer conv3x3
-        width = int(inplanes / 4)
+        width = int(inplanes / 2)
         
         self.conv1 = conv1x1(inplanes, width)
         self.bn1 = norm_layer(width)
@@ -276,14 +276,14 @@ class ResNet(nn.Module):
                 res_conn_type.append(self._make_layer_reduced_res)
         
         ### 32 -> 32
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=5, padding=2, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
         ### 32 -> 16
-        self.layer1 = res_conn_type[0](64, 64, layers[0], stride=2)
+        self.layer1 = res_conn_type[0](32, 32, layers[0], stride=2)
         ### 16 -> 8
-        self.layer2 = res_conn_type[1](64, 128, layers[1], stride=2)
+        self.layer2 = res_conn_type[1](32, 64, layers[1], stride=2)
         ### 8 -> 4
-        self.layer3 = res_conn_type[2](128, 256, layers[2], stride=2)
+        self.layer3 = res_conn_type[2](64, 128, layers[2], stride=2)
         '''
         ### 8 -> 2
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
@@ -297,7 +297,7 @@ class ResNet(nn.Module):
         self.linear = nn.Linear(512, 10)
         '''
         self.dropout = nn.Dropout(drop)
-        self.linear = nn.Linear(256, 10)
+        self.linear = nn.Linear(128, 10)
 
         ### initialization
         for m in self.modules():
@@ -323,7 +323,7 @@ class ResNet(nn.Module):
                 else:
                     nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu') 
             elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
+                nn.init.uniform_(m.weight, a=0, b=1)
                 nn.init.constant_(m.bias, 0)
             
     def _make_layer_conv_res(self, inplanes, planes, blocks, stride=1):
@@ -337,29 +337,6 @@ class ResNet(nn.Module):
         layers = []
         ### il primo blocco fa il downsample
         layers.append(Bottleneck(inplanes, planes, stride, downsample))
-        for i in range(1, blocks):
-            layers.append(Bottleneck(planes, planes))
-
-        return nn.Sequential(*layers)
-
-    def _make_layer_reduced_res(self, inplanes, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 :
-            downsample = nn.Sequential(
-                    nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-                )
-        if inplanes != planes:
-            if downsample != None:
-                downsample.append(concatLayer())
-            else:
-                downsample = nn.Sequential(
-                    concatLayer()
-                )
-
-        layers = []
-        ### il primo blocco fa il downsample
-        layers.append(Bottleneck(inplanes, planes, stride, downsample))
-        ### si potrebbe pensare ad una crescita dei canali graduale nei vari blocchi...
         for i in range(1, blocks):
             layers.append(Bottleneck(planes, planes))
 
@@ -393,45 +370,41 @@ def isaResNet_14():
     return model, "isaResNet_14"
 
 ### resnet model with bottleneck:
-#   - 25 conv layers
-#   - 25 bn layers
+#   - 37 conv layers
+#   - 37 bn layers
 #   - 1 fc
-def isaResNet_26():
-    model = ResNet([True, True, True], [2, 2, 4])
-    return model, "isaResNet_26"
+def isaResNet_38():
+    model = ResNet([True, True, True], [3, 3, 6])
+    return model, "isaResNet_38"
 
 ### resnet model with bottleneck:
-#   - 49 conv layers
-#   - 49 bn layers
+#   - 109 conv layers
+#   - 109 bn layers
 #   - 1 fc
   # standard version
-def isaResNet_50():
-    model = ResNet([True, True, True], [4, 4, 8])
-    return model, "isaResNet_50"
-  # reduced version
-def isaResNet_50_reduced():
-    model = ResNet([False, False, False], [4, 4, 8])
-    return model, "isaResNet_50_reduced"
+def isaResNet_110():
+    model = ResNet([True, True, True], [12, 12, 12])
+    return model, "isaResNet_110"
   # wide normal distr initialization version
-def isaResNet_50_normal():
-    model = ResNet([True, True, True], [4, 4, 8], init="normal")
-    return model, "isaResNet_50_normal"
+def isaResNet_110_normal():
+    model = ResNet([True, True, True], [12, 12, 12], init="normal")
+    return model, "isaResNet_110_normal"
   # sparse matrix version
-def isaResNet_50_sparse():
-    model = ResNet([True, True, True], [4, 4, 8], init="sparse", sparse_ammount=0.5)
-    return model, "isaResNet_50_sparse"
+def isaResNet_110_sparse():
+    model = ResNet([True, True, True], [12, 12, 12], init="sparse", sparse_ammount=0.5)
+    return model, "isaResNet_110_sparse"
   # dropout version
-def isaResNet_50_dropout():
-    model = ResNet([True, True, True], [4, 4, 8], drop=0.5)
-    return model, "isaResNet_50_dropout"
+def isaResNet_110_dropout():
+    model = ResNet([True, True, True], [12, 12, 12], drop=0.5)
+    return model, "isaResNet_110_dropout"
 
 ### resnet model with bottleneck:
-#   - 97 conv layers
-#   - 97 bn layers
+#   - 289 conv layers
+#   - 289 bn layers
 #   - 1 fc
-def isaResNet_98():
-    model = ResNet([True, False, False], [8, 8, 16], init="normal")
-    return model, "isaResNet_98"
+def isaResNet_290():
+    model = ResNet([True, False, False], [32, 32, 32], init="normal")
+    return model, "isaResNet_290"
 
 ###exercize_3 model for the standard exercize
 
