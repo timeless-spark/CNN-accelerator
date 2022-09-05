@@ -148,7 +148,6 @@ for func in model_list:
 
         for t in tqdm(range(epochs)):
             print(f"Epoch {t+1}\n-------------------------------")
-            print(model.conv1.weight[0,0,:,:])
             loss = train(train_dataloader, model, loss_fn, optimizer, tr_dict[name]["training_loss"])
             current_acc = test(validation_dataloader, model, loss_fn, tr_dict[name]["validation_loss"])
             scheduler.step(tr_dict[name]["validation_loss"][-1])
