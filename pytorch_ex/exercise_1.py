@@ -34,9 +34,10 @@ from torchvision.transforms import transforms
 import numpy as np
 from tqdm import tqdm
 from torch_neural_networks_library import default_model
-from find_num_workers import find_num_workers
+#from find_num_workers import find_num_workers
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
+import time
 
 Path("./runs/exercise_1").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
 writer = SummaryWriter('runs/exercise_1')
@@ -81,7 +82,7 @@ print("Mean: ", mean, "Std: ", std)
 transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.1309], std=[0.3018])])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.1309], std=[0.3018])])
 
-training_data = datasets.MNIST(root="data", train=True, download=False, transform=transform_train)
+training_data = datasets.MNIST(root="data", train=True, download=True, transform=transform_train)
 test_data = datasets.MNIST(root="data", train=False, download=False, transform=transform_test)
 
 #best_workers = find_num_workers(training_data=training_data, batch_size=batch_size)
@@ -133,7 +134,7 @@ def train(dataloader, model, loss_fn, optimizer, epoch):
 
         if batch % 100 == 0:
             loss, current = loss.item(), batch * len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            #print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
             writer.add_scalar('training loss', loss / 1000, epoch * len(dataloader) + batch)
     return loss
 
@@ -165,81 +166,115 @@ print("Using {} device".format(device))
 # TODO: Which parameters can you change in the Stochastic Gradient Descent optimizer? Is the default learning rate
 #       appropriate for a fast convergence?
     #optimizer and scheduler in the loop......
-lr = 5e-2
+lr_list = [5e-2, 5e-3]
+lr_decay = [0.1, 0.5]
+epoch_list = [[3,1], [5,2]]
 
 # TODO: find the optimal batch size for your training setup. The batch size influences how much GPU or system memory is
 #       required, but also influences how fast the optimizer can converge to the optima. Values too big or too
 #       small will slow down your training or even cause a crash sometimes, try to find a good compromise. Use the
 #       average loss and iteration time displayed in the console during the training to tune the batch size.
-batch_size = [12, 16, 32, 64]
-#batch_size = [12, 16, 24, 32, 40, 56, 64]
+batch_list = [12, 16, 32]
 
 # TODO: change the epochs parameter to change how many times the model is trained over the entire dataset. How many
 #       epochs does your model require to reach the optima or oscillate around it? How many epochs does your model
 #       require to get past 80% accuracy? How many for 90%? How can you speed-up the training without increasing the
 #       epochs from the default value of 5?
 
-epoch = 3
+results = []
+index = 0
+
 best_correct = 0
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 print("Use $ tensorboard --logdir=runs/exercise_1 to access training statistics")
-for batch in batch_size:
-    model = default_model()
-    model.to(device)
-    train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)
-    test_dataloader = DataLoader(test_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)
-    optimizer = torch.optim.SGD(model.parameters(), weight_decay=lr/128, momentum=.8, lr=lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.4)
-    print(f"using: batch={batch}, n_ep={epoch}, lr={lr}")
-    for t in tqdm(range(epoch)):
-        print(f"Epoch {t+1}\n-------------------------------")
-        loss = train(train_dataloader, model, loss_fn, optimizer, t)
-        current_correct = test(test_dataloader, model, loss_fn)
-        scheduler.step()
-        writer.add_scalar('test accuracy', current_correct, t)
-        writer.flush()
-        if current_correct > best_correct:
-            best_correct = current_correct
-            torch.save({
-                "batch_size": batch,
-                "lr": lr,
-                'epoch': t,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': loss,
-                'test_acc': current_correct,
-            }, "./saved_models/exercise1.pth")
-    #break
+for epoch in epoch_list:
+    for batch in batch_list:
+        for lr in lr_list:
+            for gamma in lr_decay:
+                model = default_model()
+                model.to(device)
+                train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)
+                test_dataloader = DataLoader(test_data, batch_size=batch, num_workers=best_workers, pin_memory=False)
+                optimizer = torch.optim.SGD(model.parameters(), weight_decay=lr/128, momentum=.8, lr=lr)
+                scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=epoch[1], gamma=gamma)
+                print(f"using: batch={batch}, n_ep={epoch[0]}, lr={lr}")
+                start = time.time()
+                for t in tqdm(range(epoch[0])):
+                    print(f"Epoch {t+1}\n-------------------------------")
+                    loss = train(train_dataloader, model, loss_fn, optimizer, t)
+                    current_correct = test(test_dataloader, model, loss_fn)
+                    scheduler.step()
+                    #writer.add_scalar('test accuracy', current_correct, t)
+                    #writer.flush()
+                    if current_correct > best_correct:
+                        best_correct = current_correct
+                        torch.save({
+                            "batch_size": batch,
+                            "lr": lr,
+                            'epoch': t,
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'loss': loss,
+                            'test_acc': current_correct,
+                        }, "./saved_models/exercise1.pth")
+                total_time = time.time() - start
 
-writer.close()
-classes = test_data.classes
+                classes = test_data.classes
 
-correct_pred = {classname: 0 for classname in classes}
-total_pred = {classname: 0 for classname in classes}
+                correct_pred = {classname: 0 for classname in classes}
+                total_pred = {classname: 0 for classname in classes}
 
-###load the best model..
-opt_model = torch.load("./saved_models/exercise1.pth")
-print(opt_model["test_acc"])
-model.load_state_dict(opt_model["model_state_dict"])
+                ###load the best model..
+                opt_model = torch.load("./saved_models/exercise1.pth")
+                print(opt_model["test_acc"])
+                model.load_state_dict(opt_model["model_state_dict"])
 
-with torch.no_grad():
-    for X, y in test_dataloader:
-        images, labels = X.to(device), y.to(device)
-        outputs = model(images)
-        _, predictions = torch.max(outputs, 1)
-        for label, prediction in zip(labels, predictions):
-            if label == prediction:
-                correct_pred[classes[label]] += 1
-            total_pred[classes[label]] += 1
+                with torch.no_grad():
+                    for X, y in test_dataloader:
+                        images, labels = X.to(device), y.to(device)
+                        outputs = model(images)
+                        _, predictions = torch.max(outputs, 1)
+                        for label, prediction in zip(labels, predictions):
+                            if label == prediction:
+                                correct_pred[classes[label]] += 1
+                            total_pred[classes[label]] += 1
 
-min_correct = [0,110]
-for classname, correct_count in correct_pred.items():
-    accuracy = 100 * float(correct_count) / total_pred[classname]
-    if min_correct[1] >= int(accuracy):
-        min_correct = [classname, accuracy]
-    print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
+                min_correct = [0,110]
+                for classname, correct_count in correct_pred.items():
+                    accuracy = 100 * float(correct_count) / total_pred[classname]
+                    if min_correct[1] >= int(accuracy):
+                        min_correct = [classname, accuracy]
+                    print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
 
-lowest_class_accuracy = min_correct[1]
+                lowest_class_accuracy = min_correct[1]
+
+                default_score = (lowest_class_accuracy/5.9417) * 0.6 + (5/epoch[0]) * 0.4
+                score = (lowest_class_accuracy/96.0357) * 0.6 + (3/epoch[0]) * 0.4
+                results.append([batch, epoch[0], lr, gamma, opt_model["test_acc"], opt_model["loss"], lowest_class_accuracy, total_time, default_score, score])
+
+                Path("./saved_models").mkdir(parents=True, exist_ok=True)
+
+                res_dict = {"results": results}
+                torch.save(res_dict, "./saved_models/ex1_res.pth")
+
+                index += 1
+
+torch.load(res_dict, "./saved_models/ex1_res.pth")
+
+index = 0
+for res in results:
+    print("Case %d" % index)
+    print("Batch size: %d" % res[0])
+    print("Epoch: %d" % res[1])
+    print("LR: %f" % res[2])
+    print("Gamma: %.2f" % res[3])
+    print("test_acc: %.4f" % res[4])
+    print("avg_loss: %.4f" % res[5])
+    print("lowest class: %.4f" % res[6])
+    print("time: %d" % res[7])
+    print("def score: %.4f" % res[8])
+    print("opt score: %.4f\n\n" % res[9])
+    index += 1
 
 print("Worst class accuracy is %.4f for class %s" %(min_correct[1], min_correct[0]))
 default_score = (lowest_class_accuracy/5.9417) * 0.6 + (5/epoch) * 0.4
