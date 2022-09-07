@@ -5,7 +5,7 @@ from torchvision import datasets
 from torchvision.transforms import transforms
 import numpy as np
 from tqdm import tqdm
-from torch_neural_networks_library import isaResNet_14, isaResNet_38, isaResNet_110, isaResNet_110_normal, isaResNet_110_sparse, isaResNet_110_dropout, isaResNet_290
+from torch_neural_networks_library import ex3ResNet_small, ex3ResNet_medium, ex3ResNet_medium_SE, ex3ResNet_large
 from pathlib import Path
 
 base_path = "../../drive/MyDrive/"
@@ -24,46 +24,15 @@ best_workers = 2
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
-#device = "cpu"
+device = "cpu"
 
-model_list = [isaResNet_110, isaResNet_110_normal, isaResNet_110_sparse, isaResNet_110_dropout]
-'''
-for model in model_list:
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    memory = params * 32 / 8 / 1024 / 1024
-    print("this model has ", params, " parameters")
-    print("total weight memory is %.4f MB\n" %(memory))
-'''
+model_list = [(ex3ResNet_small, "ex3ResNet_small"), (ex3ResNet_medium, "ex3ResNet_medium"), (ex3ResNet_medium_SE, "ex3ResNet_medium_SE"), (ex3ResNet_large, "ex3ResNet_large")]
+for p in model_list:
+    print(p[1])
 
 def return_model_params(model):
-    '''
     ### TRAINING THE ALL PARAMS..
     params = model.parameters()
-    '''
-    '''
-    ### TRAINING ONLY THE BATCH NORM..
-    params = list()
-    for mod in model.modules():
-        if isinstance(mod, nn.BatchNorm2d):
-            params += list(mod.parameters())
-    '''
-    ### TRANING BATCH NORM + DOWNSAMPLE CONV..
-    params = list()
-    for mod in model.modules():
-        if isinstance(mod, nn.BatchNorm2d):
-            params += list(mod.parameters())
-        if isinstance(mod, nn.Conv2d) and mod.kernel_size == (1, 1) and mod.stride == (2, 2):
-            params += list(mod.parameters())
-    '''
-    ### TRAINING BATCH NORM + FC LAYER..
-    params = list()
-    for mod in model.modules():
-        if isinstance(mod, nn.BatchNorm2d):
-            params += list(mod.parameters())
-        if isinstance(mod, nn.Linear):
-            params += list(mod.parameters())
-    '''
     return params
 
 def train(dataloader, model, loss_fn, optimizer, loss_list):
@@ -110,7 +79,7 @@ batch_size = 128
 lr = 1e-1
 L2_lambda = 1e-5
 wd = L2_lambda/lr
-epochs = 160
+epochs = 80
 loss_fn = nn.CrossEntropyLoss()
 #loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1.,0.8,1.25,1.25,1.25,1.2,1.2,1.,1.,1.]).to(device))
 
@@ -124,14 +93,15 @@ print("test dataset samples: ", len(test_dataloader.dataset))
 
 if initialize_dict:
     tr_dict = {}
-    for func in model_list:
-        model, name = func()
+    for model_type in model_list:
+        model, name = model_type[0](), model_type[1]
         params = return_model_params(model)
         optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=0.9, lr=lr)
         #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80,120], gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40,60], gamma=0.1)
         tr_dict[name] = {
-            "model_state_dict": model.state_dict(),
+            "model_state_dict": [model.state_dict(), 0],
+            "learnable_params": sum(torch.numel(p) for p in return_model_params(model)),
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "epoch_done": 0,
@@ -143,21 +113,30 @@ if initialize_dict:
 
 tr_dict = torch.load(base_path + "saved_models/exercise3.pth")
 
-best_acc = 0
+print(tr_dict["ex3ResNet_small"]["learnable_params"])
+print(tr_dict["ex3ResNet_medium"]["learnable_params"])
+print(tr_dict["ex3ResNet_medium_SE"]["learnable_params"])
+print(tr_dict["ex3ResNet_large"]["learnable_params"])
 
-for func in model_list:
-    model, name = func()
+for model_type in model_list:
+    model, name = model_type[0](), model_type[1]
+    print(name)
     if tr_dict[name]["epoch_done"] < epochs:
-        model.load_state_dict(tr_dict[name]["model_state_dict"])
+        print("training model: ", name)
+        model.load_state_dict(tr_dict[name]["model_state_dict"][0])
         model.to(device)
         params = return_model_params(model)
         optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=0.9, lr=lr)
         optimizer.load_state_dict(tr_dict[name]["optimizer_state_dict"])
         #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80,120], gamma=0.1, verbose=True)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40,60], gamma=0.1, verbose=True)
         scheduler.load_state_dict(tr_dict[name]["scheduler_state_dict"])
+        if tr_dict[name]["epoch_done"] == 0:
+          best_acc = 0
+        else:
+          best_acc = tr_dict[name]["model_state_dict"][1]
 
-        for t in tqdm(range(epochs)):
+        for t in tqdm(range(epochs - tr_dict[name]["epoch_done"])):
             print(f"Epoch {t+1}\n-------------------------------")
             loss = train(train_dataloader, model, loss_fn, optimizer, tr_dict[name]["training_loss"])
             current_acc = test(validation_dataloader, model, loss_fn, tr_dict[name]["validation_loss"])
@@ -169,7 +148,7 @@ for func in model_list:
             tr_dict[name]["scheduler_state_dict"] = scheduler.state_dict()
             if current_acc > best_acc:
                 best_acc = current_acc
-                tr_dict[name]["model_state_dict"] = model.state_dict()
+                tr_dict[name]["model_state_dict"] = [model.state_dict(), best_acc]
             torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
             print(f"lr: {optimizer.param_groups[0]['lr']:0.2e}\n")
 
