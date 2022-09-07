@@ -24,6 +24,9 @@ The two default models, one trained without changing any parameter in this scrip
 loop only (learning rate, data pre-processing) are provided in "saved_models", named exercise1_default.pth and
 exercise1_default_optimized.pth respectively.
 """
+import matplotlib
+#matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
 
 from pickle import FALSE
 import torch, torchvision, copy
@@ -257,4 +260,83 @@ Path("./saved_models").mkdir(parents=True, exist_ok=True)
 res_dict = {"results": results}
 torch.save(res_dict, "./saved_models/ex1_res.pth")
 
+
+
 ### AGIUNGERE PARTE NICOLA..
+res_load = torch.load("./saved_models/ex1_res.pth")
+
+results = res_load['results']
+bs = []
+ep = []
+lr = []
+ga = []
+ta = []
+al = []
+lc = []
+t = []
+ds = []
+opts = []
+index = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+
+for res in results:
+    bs.append(res[0])
+    ep.append(res[1])
+    lr.append(res[2])
+    ga.append(res[3])
+    ta.append(res[4])
+    al.append(res[5].detach().numpy())
+    lc.append(res[6])
+    t.append(res[7])
+    ds.append(res[8])
+    opts.append(res[9])
+
+print (t)
+
+plt.style.use('_mpl-gallery')
+
+# make data
+x = np.linspace(0, 11, 12)
+
+#TEST ACCURACY PLOT
+y1 = ta[0:12]
+y2 = ta[12:24]
+
+
+plt.figure(1)
+plt.plot(x, y1, label='epochs=3')
+plt.plot(x, y2, label = 'epochs=5')
+plt.xlabel('Runs')
+plt.ylabel('Test accuracy')
+plt.legend()
+plt.xticks(np.arange(0, 11, 1))
+
+
+#AVERAGE LOSS PLOT
+y1 = al[0:12]#.detach().numpy()
+y2 = al[12:24]#.detach().numpy()
+
+
+plt.figure(2)
+plt.plot(x, y1, label='epochs=3')
+plt.plot(x, y2, label = 'epochs=5')
+plt.xlabel('Runs')
+plt.ylabel('Avg loss')
+plt.legend()
+plt.xticks(np.arange(0, 11, 1))
+
+
+
+#TIME PLOT
+y1 = t[0:12]
+y2 = t[12:24]
+
+
+plt.figure(3)
+plt.plot(x, y1, label='epochs=3')
+plt.plot(x, y2, label = 'epochs=5')
+plt.xlabel('Runs')
+plt.ylabel('Time')
+plt.legend()
+plt.xticks(np.arange(0, 11, 1))
+
+plt.show()
