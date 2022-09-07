@@ -182,9 +182,7 @@ batch_list = [12, 16, 32]
 #       epochs from the default value of 5?
 
 results = []
-index = 0
 
-best_correct = 0
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 print("Use $ tensorboard --logdir=runs/exercise_1 to access training statistics")
 for epoch in epoch_list:
@@ -198,6 +196,7 @@ for epoch in epoch_list:
                 optimizer = torch.optim.SGD(model.parameters(), weight_decay=lr/128, momentum=.8, lr=lr)
                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=epoch[1], gamma=gamma)
                 print(f"using: batch={batch}, n_ep={epoch[0]}, lr={lr}")
+                best_correct = 0
                 start = time.time()
                 for t in tqdm(range(epoch[0])):
                     print(f"Epoch {t+1}\n-------------------------------")
@@ -251,35 +250,11 @@ for epoch in epoch_list:
                 default_score = (lowest_class_accuracy/5.9417) * 0.6 + (5/epoch[0]) * 0.4
                 score = (lowest_class_accuracy/96.0357) * 0.6 + (3/epoch[0]) * 0.4
                 results.append([batch, epoch[0], lr, gamma, opt_model["test_acc"], opt_model["loss"], lowest_class_accuracy, total_time, default_score, score])
+                #default score is against default loop, score is against the optimized loop...
 
-                Path("./saved_models").mkdir(parents=True, exist_ok=True)
+Path("./saved_models").mkdir(parents=True, exist_ok=True)
 
-                res_dict = {"results": results}
-                torch.save(res_dict, "./saved_models/ex1_res.pth")
+res_dict = {"results": results}
+torch.save(res_dict, "./saved_models/ex1_res.pth")
 
-                index += 1
-
-torch.load(res_dict, "./saved_models/ex1_res.pth")
-
-index = 0
-for res in results:
-    print("Case %d" % index)
-    print("Batch size: %d" % res[0])
-    print("Epoch: %d" % res[1])
-    print("LR: %f" % res[2])
-    print("Gamma: %.2f" % res[3])
-    print("test_acc: %.4f" % res[4])
-    print("avg_loss: %.4f" % res[5])
-    print("lowest class: %.4f" % res[6])
-    print("time: %d" % res[7])
-    print("def score: %.4f" % res[8])
-    print("opt score: %.4f\n\n" % res[9])
-    index += 1
-
-print("Worst class accuracy is %.4f for class %s" %(min_correct[1], min_correct[0]))
-default_score = (lowest_class_accuracy/5.9417) * 0.6 + (5/epoch) * 0.4
-score = (lowest_class_accuracy/96.0357) * 0.6 + (3/epoch) * 0.4
-
-print("Score for this exercise against default training script = %.4f" %(default_score))
-print("Score for this exercise against optimized training script = %.4f" %(score))
-
+### AGIUNGERE PARTE NICOLA..
