@@ -611,19 +611,27 @@ class ex3ResNet_large(nn.Module):
 
         ### 32 -> 16
         self.res1_1 = ResidualBlock(in_channels=32, out_channels=32, bias=False, block_type="Residual33")
-        self.res1_2 = ResidualBlock(in_channels=32, out_channels=64, halve_resolution=True, bias=False, block_type="Residual33")
+        self.res1_2 = ResidualBlock(in_channels=32, out_channels=32, bias=False, block_type="Residual33")
+        self.res1_3 = ResidualBlock(in_channels=32, out_channels=32, bias=False, block_type="Residual33")
+        self.res1_4 = ResidualBlock(in_channels=32, out_channels=64, halve_resolution=True, bias=False, block_type="Residual33")
 
         ### 16 -> 8
         self.res2_1 = ResidualBlock(in_channels=64, int_channels=32, out_channels=64, bias=False, block_type="Residual131")
-        self.res2_2 = ResidualBlock(in_channels=64, int_channels=64, out_channels=128, halve_resolution=True, bias=False, block_type="Residual131")
+        self.res2_2 = ResidualBlock(in_channels=64, int_channels=32, out_channels=64, bias=False, block_type="Residual131")
+        self.res2_3 = ResidualBlock(in_channels=64, int_channels=32, out_channels=64, bias=False, block_type="Residual131")
+        self.res2_4 = ResidualBlock(in_channels=64, int_channels=64, out_channels=128, halve_resolution=True, bias=False, block_type="Residual131")
 
         ### 8 -> 8
-        self.res3_1 = ResidualBlock(in_channels=128, int_channels=64, out_channels=128, bias=False, block_type="Residual131")
-        self.res3_2 = ResidualBlock(in_channels=128, int_channels=128, out_channels=256, bias=False, block_type="Residual131")
+        self.res3_1 = ResidualBlock(in_channels=128, int_channels=32, out_channels=128, bias=False, block_type="Residual131")
+        self.res3_2 = ResidualBlock(in_channels=128, int_channels=32, out_channels=128, bias=False, block_type="Residual131")
+        self.res3_3 = ResidualBlock(in_channels=128, int_channels=32, out_channels=128, bias=False, block_type="Residual131")
+        self.res3_4 = ResidualBlock(in_channels=128, int_channels=64, out_channels=256, bias=False, block_type="Residual131")
 
         ### 8 -> 4
-        self.res4_1 = ResidualBlock(in_channels=256, int_channels=128, out_channels=256, bias=False, block_type="Residual131")
-        self.res4_2 = ResidualBlock(in_channels=256, int_channels=256, out_channels=512, halve_resolution=True, bias=False, block_type="Residual131")
+        self.res4_1 = ResidualBlock(in_channels=256, int_channels=64, out_channels=256, bias=False, block_type="Residual131")
+        self.res4_2 = ResidualBlock(in_channels=256, int_channels=64, out_channels=256, bias=False, block_type="Residual131")
+        self.res4_3 = ResidualBlock(in_channels=256, int_channels=64, out_channels=256, bias=False, block_type="Residual131")
+        self.res4_4 = ResidualBlock(in_channels=256, int_channels=128, out_channels=512, halve_resolution=True, bias=False, block_type="Residual131")
 
         ### 4 -> 1
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
@@ -638,12 +646,20 @@ class ex3ResNet_large(nn.Module):
         x = self.relu(x)
         x = self.res1_1(x)
         x = self.res1_2(x)
+        x = self.res1_3(x)
+        x = self.res1_4(x)
         x = self.res2_1(x)
         x = self.res2_2(x)
+        x = self.res2_3(x)
+        x = self.res2_4(x)
         x = self.res3_1(x)
         x = self.res3_2(x)
+        x = self.res3_3(x)
+        x = self.res3_4(x)
         x = self.res4_1(x)
         x = self.res4_2(x)
+        x = self.res4_3(x)
+        x = self.res4_4(x)
         x = self.avgpool(x)
         x = self.flatten(x)
         x = self.linear(x)
