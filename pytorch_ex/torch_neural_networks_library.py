@@ -466,7 +466,7 @@ class ex3ResNet_small(nn.Module):
     def __init__(self):
         super().__init__()
         ### 32 -> 32
-        self.conv1 = nn.Conv2d(3, 8, kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=5, padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(8)
 
         ### 32 -> 16
@@ -510,7 +510,7 @@ class ex3ResNet_medium(nn.Module):
     def __init__(self):
         super().__init__()
         ### 32 -> 32
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
 
         ### 32 -> 16
@@ -558,7 +558,7 @@ class ex3ResNet_medium_SE(nn.Module):
     def __init__(self):
         super().__init__()
         ### 32 -> 32
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
 
         ### 32 -> 16
@@ -606,7 +606,7 @@ class ex3ResNet_large(nn.Module):
     def __init__(self):
         super().__init__()
         ### 32 -> 32
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
 
         ### 32 -> 16
