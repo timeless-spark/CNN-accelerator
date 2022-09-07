@@ -138,7 +138,7 @@ if initialize_dict:
         #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80,120], gamma=0.1)
         tr_dict[name] = {
-            "model_state_dict": model.state_dict(),
+            "model_state_dict": [model.state_dict(), 0],
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "epoch_done": 0,
@@ -150,12 +150,11 @@ if initialize_dict:
 
 tr_dict = torch.load(base_path + "saved_models/exercise3.pth")
 
-best_acc = 0
-
 for func in model_list:
     model, name = func()
     if tr_dict[name]["epoch_done"] < epochs:
-        model.load_state_dict(tr_dict[name]["model_state_dict"])
+        print("training model: ", name)
+        model.load_state_dict(tr_dict[name]["model_state_dict"][0])
         model.to(device)
         params = return_model_params(model)
         optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=0.9, lr=lr)
@@ -163,8 +162,12 @@ for func in model_list:
         #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80,120], gamma=0.1, verbose=True)
         scheduler.load_state_dict(tr_dict[name]["scheduler_state_dict"])
+        if tr_dict[name]["epoch_done"] == 0:
+          best_acc = 0
+        else:
+          best_acc = tr_dict[name]["model_state_dict"][1]
 
-        for t in tqdm(range(epochs)):
+        for t in tqdm(range(epochs - tr_dict[name]["epoch_done"])):
             print(f"Epoch {t+1}\n-------------------------------")
             loss = train(train_dataloader, model, loss_fn, optimizer, tr_dict[name]["training_loss"])
             current_acc = test(validation_dataloader, model, loss_fn, tr_dict[name]["validation_loss"])
@@ -176,9 +179,10 @@ for func in model_list:
             tr_dict[name]["scheduler_state_dict"] = scheduler.state_dict()
             if current_acc > best_acc:
                 best_acc = current_acc
-                tr_dict[name]["model_state_dict"] = model.state_dict()
+                tr_dict[name]["model_state_dict"] = [model.state_dict(), best_acc]
             torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
             print(f"lr: {optimizer.param_groups[0]['lr']:0.2e}\n")
+
 
 ###-----
 
@@ -194,7 +198,7 @@ colors = ['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown'
 
 for func in range(1):
     model, name = model_list[0]()
-    model.load_state_dict(tr_dict[name]["model_state_dict"])
+    model.load_state_dict(tr_dict[name]["model_state_dict"][0])
     model.to(device)
 
     #training loss
