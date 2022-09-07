@@ -70,9 +70,10 @@ class micro_resnet(nn.Module):
         self.conv2D_4 = nn.Conv2d(4,4,kernel_size=(3,3), stride=(2,2), padding=1)
         self.conv2D_5 = nn.Conv2d(4,16,kernel_size=(1,1), stride=(1,1))
         self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
-        self.act = nn.ReLU6()
+        self.act = nn.ReLU()
+        self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(256,10)
+        self.linear = nn.Linear(64,10)
 
         torch.nn.init.xavier_normal_(self.conv2D_1.weight)
         torch.nn.init.xavier_normal_(self.conv2D_2.weight)
@@ -99,6 +100,7 @@ class micro_resnet(nn.Module):
         out = out + x_skip2
         out = self.act(out)
         #flatten + dropout + fully connected (1 layer)
+        out = self.avgpool(out)
         out = self.flatten(out)
         out = self.linear(out)
         return out
@@ -113,9 +115,10 @@ class nano_resnet(nn.Module):
         self.conv2D_4 = nn.Conv2d(2,2,kernel_size=(3,3), stride=(2,2), padding=1)
         self.conv2D_5 = nn.Conv2d(2,8,kernel_size=(1,1), stride=(1,1))
         self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
-        self.act = nn.ReLU6()
+        self.act = nn.ReLU()
+        self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(128,10)
+        self.linear = nn.Linear(32,10)
 
         torch.nn.init.xavier_normal_(self.conv2D_1.weight)
         torch.nn.init.xavier_normal_(self.conv2D_2.weight)
@@ -142,6 +145,7 @@ class nano_resnet(nn.Module):
         out = out + x_skip2
         out = self.act(out)
         #flatten + dropout + fully connected (1 layer)
+        out = self.avgpool(out)
         out = self.flatten(out)
         out = self.linear(out)
         return out
@@ -163,10 +167,10 @@ class mini_resnet(nn.Module):
         self.skip2 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
 
         self.act = nn.ReLU()
-        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
+        self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
         ### 1
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(64,10)
+        self.linear = nn.Linear(256,10)
 
         torch.nn.init.kaiming_normal_(self.conv2D_1.weight)
         torch.nn.init.kaiming_normal_(self.conv2D_2.weight)
@@ -192,6 +196,56 @@ class mini_resnet(nn.Module):
         out = self.conv2D_5(out)
         out = out + x_skip2
         out = self.act(out)
+        #downsample
+        out = self.avgpool(out)
+        #flatten + dropout + fully connected (1 layer)
+        out = self.flatten(out)
+        out = self.linear(out)
+        return out
+
+class inv_resnet(nn.Module):
+    def __init__(self):
+        super(inv_resnet, self).__init__()
+        ### 28
+        self.conv2D_1 = nn.Conv2d(1,32,kernel_size=(3,3), stride=(2,2), padding=1, bias=True)
+        ### 14
+        self.conv2D_2 = nn.Conv2d(32,16, kernel_size=(1,1), stride=(1,1), bias=True)
+        self.conv2D_3 = nn.Conv2d(16,16,kernel_size=(3,3), stride=(2,2), padding=1, bias=True)
+        ### 7
+        self.conv2D_4 = nn.Conv2d(16,32,kernel_size=(1,1), stride=(1,1), bias=True)
+        self.skip1 = nn.MaxPool2d(kernel_size=(3,3), stride=(2,2), padding=1)
+
+        self.conv2D_5 = nn.Conv2d(32,64,kernel_size=(3,3), stride=(2,2), padding=1, bias=True)
+        ### 4
+        self.act = nn.ReLU()
+        self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
+        ### 1
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(256,10)
+
+        torch.nn.init.kaiming_normal_(self.conv2D_1.weight)
+        torch.nn.init.kaiming_normal_(self.conv2D_2.weight)
+        torch.nn.init.kaiming_normal_(self.conv2D_3.weight)
+        torch.nn.init.kaiming_normal_(self.conv2D_4.weight)
+        torch.nn.init.kaiming_normal_(self.conv2D_5.weight)
+        torch.nn.init.kaiming_normal_(self.linear.weight)
+
+    def forward(self, x):
+        #downsample
+        out = self.conv2D_1(x)
+        out = self.act(out)
+        #bottleneck res connection (3 layer)
+        x_skip1 = self.skip1(out)
+        out = self.conv2D_2(out)
+        out = self.act(out)
+        out = self.conv2D_3(out)
+        out = self.act(out)
+        out = self.conv2D_4(out)
+        out = out + x_skip1
+        out = self.act(out)
+        out = self.conv2D_5(out)
+        out = self.act(out)
+
         #downsample
         out = self.avgpool(out)
         #flatten + dropout + fully connected (1 layer)
