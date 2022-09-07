@@ -32,14 +32,6 @@ print("Using {} device".format(device))
 #device = "cpu"
 
 model_list = [isaResNet_110, isaResNet_110_normal, isaResNet_110_sparse, isaResNet_110_dropout]
-'''
-for model in model_list:
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    memory = params * 32 / 8 / 1024 / 1024
-    print("this model has ", params, " parameters")
-    print("total weight memory is %.4f MB\n" %(memory))
-'''
 
 def return_model_params(model):
     '''
@@ -136,9 +128,10 @@ if initialize_dict:
         params = return_model_params(model)
         optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=0.9, lr=lr)
         #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80,120], gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40,60], gamma=0.1)
         tr_dict[name] = {
             "model_state_dict": [model.state_dict(), 0],
+            "learnable_params": sum(torch.numel(p) for p in return_model_params(model)),
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "epoch_done": 0,
@@ -146,9 +139,9 @@ if initialize_dict:
             "validation_loss": [],
             "validation_acc": []
         }
-    torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
+    torch.save(tr_dict, base_path + "saved_models/exercise3_bis.pth")
 
-tr_dict = torch.load(base_path + "saved_models/exercise3.pth")
+tr_dict = torch.load(base_path + "saved_models/exercise3_bis.pth")
 
 for func in model_list:
     model, name = func()
@@ -182,7 +175,6 @@ for func in model_list:
                 tr_dict[name]["model_state_dict"] = [model.state_dict(), best_acc]
             torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
             print(f"lr: {optimizer.param_groups[0]['lr']:0.2e}\n")
-
 
 ###-----
 
