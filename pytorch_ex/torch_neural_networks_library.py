@@ -312,11 +312,11 @@ class ResNet(nn.Module):
                         #        nn.init.sparse_(m.weight[i, j, :, :], sparsity=0.2, std=1.0)
                         #        m.weight = nn.parameter.Parameter(m.weight, requires_grad=True)
                       #'SPARSIFICATION' IS DONE BY HAND..
-                        nn.init.normal_(m.weight, std=1.0)
+                        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                         prova = torch.from_numpy(np.random.binomial(1, 1-sparse_ammount, m.weight.shape))
                         m.weight = nn.parameter.Parameter(m.weight * prova, requires_grad=True)
                 else:
-                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu') 
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, nn.Linear):
                 if init is not None:
                         nn.init.normal_(m.weight, std=1.0)
@@ -408,24 +408,72 @@ def isaResNet_290():
 
 ###exercize_3 model for the standard exercize
 
-class ex3ResNet(nn.Module):
+class ex3ResNet_small(nn.Module):
     def __init__(self):
         super().__init__()
-        ### 32 -> 16
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2, bias=False)
-        self.bn1 = nn.BatchNorm2d(32)
+        ### 32 -> 32
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=5, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(8)
 
-        ### 16 -> 16
-        self.res1_1 = ResidualBlock(in_channels=32, int_channels=32, out_channels=32, bias=False, block_type="Residual33")
-        self.res1_2 = ResidualBlock(in_channels=32, int_channels=32, out_channels=64, bias=False, block_type="Residual33", squeeze_and_excite=True, SE_ratio=2)
+        ### 32 -> 16
+        self.res1_1 = ResidualBlock(in_channels=8, out_channels=8, bias=False, block_type="Residual33")
+        self.res1_2 = ResidualBlock(in_channels=8, out_channels=16, halve_resolution=True, bias=False, block_type="Residual33")
 
         ### 16 -> 8
-        self.res2_1 = ResidualBlock(in_channels=64, int_channels=16, out_channels=64, bias=False, block_type="Residual131")
-        self.res2_2 = ResidualBlock(in_channels=64, int_channels=16, out_channels=128, halve_resolution=True, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=4)
+        self.res2_1 = ResidualBlock(in_channels=16, int_channels=8, out_channels=16, bias=False, block_type="Residual131")
+        self.res2_2 = ResidualBlock(in_channels=16, int_channels=8, out_channels=32, halve_resolution=True, bias=False, block_type="Residual131")
 
         ### 8 -> 4
-        self.res3_1 = ResidualBlock(in_channels=128, int_channels=32, out_channels=128, bias=False, block_type="Residual131")
-        self.res3_2 = ResidualBlock(in_channels=128, int_channels=32, out_channels=256, halve_resolution=True, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=4)
+        self.res3_1 = ResidualBlock(in_channels=32, out_channels=32, bias=False, block_type="SeparableConv2d", SP_replicas=2)
+        self.res3_2 = ResidualBlock(in_channels=32, out_channels=64, halve_resolution=True, bias=False, block_type="SeparableConv2d", SP_replicas=1)
+        self.res3_3 = ResidualBlock(in_channels=64, out_channels=64, bias=False, block_type="SeparableConv2d", SP_replicas=1)
+
+        ### 4 -> 1
+        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
+        
+        self.relu = nn.ReLU(inplace=True)
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(64, 10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.res1_1(x)
+        x = self.res1_2(x)
+        x = self.res2_1(x)
+        x = self.res2_2(x)
+        x = self.res3_1(x)
+        x = self.res3_2(x)
+        x = self.res3_3(x)
+        x = self.avgpool(x)
+        x = self.flatten(x)
+        x = self.linear(x)
+
+        return x
+
+class ex3ResNet_medium(nn.Module):
+    def __init__(self):
+        super().__init__()
+        ### 32 -> 32
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
+
+        ### 32 -> 16
+        self.res1_1 = ResidualBlock(in_channels=16, out_channels=16, bias=False, block_type="Residual33")
+        self.res1_2 = ResidualBlock(in_channels=16, out_channels=32, halve_resolution=True, bias=False, block_type="Residual33")
+
+        ### 16 -> 8
+        self.res2_1 = ResidualBlock(in_channels=32, int_channels=16, out_channels=32, bias=False, block_type="Residual131")
+        self.res2_2 = ResidualBlock(in_channels=32, int_channels=16, out_channels=64, halve_resolution=True, bias=False, block_type="Residual131")
+
+        ### 8 -> 8
+        self.res3_1 = ResidualBlock(in_channels=64, int_channels=32, out_channels=64, bias=False, block_type="Residual131")
+        self.res3_2 = ResidualBlock(in_channels=64, int_channels=32, out_channels=128, bias=False, block_type="Residual131")
+
+        ### 8 -> 4
+        self.res4_1 = ResidualBlock(in_channels=128, int_channels=64, out_channels=128, bias=False, block_type="Residual131")
+        self.res4_2 = ResidualBlock(in_channels=128, int_channels=64, out_channels=256, halve_resolution=True, bias=False, block_type="Residual131")
 
         ### 4 -> 1
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
@@ -444,6 +492,104 @@ class ex3ResNet(nn.Module):
         x = self.res2_2(x)
         x = self.res3_1(x)
         x = self.res3_2(x)
+        x = self.res4_1(x)
+        x = self.res4_2(x)
+        x = self.avgpool(x)
+        x = self.flatten(x)
+        x = self.linear(x)
+
+        return x
+
+class ex3ResNet_medium_SE(nn.Module):
+    def __init__(self):
+        super().__init__()
+        ### 32 -> 32
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
+
+        ### 32 -> 16
+        self.res1_1 = ResidualBlock(in_channels=16, out_channels=16, bias=False, block_type="Residual33")
+        self.res1_2 = ResidualBlock(in_channels=16, out_channels=32, halve_resolution=True, bias=False, block_type="Residual33", squeeze_and_excite=True, SE_ratio=2)
+
+        ### 16 -> 8
+        self.res2_1 = ResidualBlock(in_channels=32, int_channels=16, out_channels=32, bias=False, block_type="Residual131")
+        self.res2_2 = ResidualBlock(in_channels=32, int_channels=16, out_channels=64, halve_resolution=True, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=4)
+
+        ### 8 -> 8
+        self.res3_1 = ResidualBlock(in_channels=64, int_channels=32, out_channels=64, bias=False, block_type="Residual131")
+        self.res3_2 = ResidualBlock(in_channels=64, int_channels=32, out_channels=128, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=4)
+
+        ### 8 -> 4
+        self.res4_1 = ResidualBlock(in_channels=128, int_channels=64, out_channels=128, bias=False, block_type="Residual131")
+        self.res4_2 = ResidualBlock(in_channels=128, int_channels=64, out_channels=256, halve_resolution=True, bias=False, block_type="Residual131", squeeze_and_excite=True, SE_ratio=4)
+
+        ### 4 -> 1
+        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
+        
+        self.relu = nn.ReLU(inplace=True)
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(256, 10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.res1_1(x)
+        x = self.res1_2(x)
+        x = self.res2_1(x)
+        x = self.res2_2(x)
+        x = self.res3_1(x)
+        x = self.res3_2(x)
+        x = self.res4_1(x)
+        x = self.res4_2(x)
+        x = self.avgpool(x)
+        x = self.flatten(x)
+        x = self.linear(x)
+
+        return x
+
+class ex3ResNet_large(nn.Module):
+    def __init__(self):
+        super().__init__()
+        ### 32 -> 32
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
+
+        ### 32 -> 16
+        self.res1_1 = ResidualBlock(in_channels=32, out_channels=32, bias=False, block_type="Residual33")
+        self.res1_2 = ResidualBlock(in_channels=32, out_channels=64, halve_resolution=True, bias=False, block_type="Residual33")
+
+        ### 16 -> 8
+        self.res2_1 = ResidualBlock(in_channels=64, int_channels=32, out_channels=64, bias=False, block_type="Residual131")
+        self.res2_2 = ResidualBlock(in_channels=64, int_channels=64, out_channels=128, halve_resolution=True, bias=False, block_type="Residual131")
+
+        ### 8 -> 8
+        self.res3_1 = ResidualBlock(in_channels=128, int_channels=64, out_channels=128, bias=False, block_type="Residual131")
+        self.res3_2 = ResidualBlock(in_channels=128, int_channels=128, out_channels=256, bias=False, block_type="Residual131")
+
+        ### 8 -> 4
+        self.res4_1 = ResidualBlock(in_channels=256, int_channels=128, out_channels=256, bias=False, block_type="Residual131")
+        self.res4_2 = ResidualBlock(in_channels=256, int_channels=256, out_channels=512, halve_resolution=True, bias=False, block_type="Residual131")
+
+        ### 4 -> 1
+        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
+        
+        self.relu = nn.ReLU(inplace=True)
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(512, 10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.res1_1(x)
+        x = self.res1_2(x)
+        x = self.res2_1(x)
+        x = self.res2_2(x)
+        x = self.res3_1(x)
+        x = self.res3_2(x)
+        x = self.res4_1(x)
+        x = self.res4_2(x)
         x = self.avgpool(x)
         x = self.flatten(x)
         x = self.linear(x)
