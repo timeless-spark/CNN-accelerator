@@ -47,16 +47,27 @@ class Quant_ResidualBlock_custom(nn.Module):
 class Quant_Residual131_custom(nn.Module):
     def __init__(self, in_channels, int_channels, out_channels, stride=(1, 1), bias=True):
         super(Quant_Residual131_custom, self).__init__()
-        self.l1 = nn.Conv2d(in_channels, int_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias)
+
+        self.weight_bit = 8
+        self.act_bit = 8
+        self.bias_bit = 16
+        self.quant_method = 'scale'
+        self.quantization = True
+        self.alpha_coeff = 10.0
+
+        self.l1 = cs.Conv2d(in_channels, int_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
+        #NICOLA : folding batchnorm
         self.bn1 = nn.BatchNorm2d(num_features=int_channels, momentum=0.01, eps=1e-3)
-        self.act1 = nn.ReLU()
-        self.l2 = nn.Conv2d(int_channels, int_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias)
+        self.act1 = cs.ReLu(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
+        self.l2 = cs.Conv2d(int_channels, int_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
         self.bn2 = nn.BatchNorm2d(num_features=int_channels, momentum=0.01, eps=1e-3)
-        self.act2 = nn.ReLU()
-        self.l3 = nn.Conv2d(int_channels, out_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias)
+        self.act2 = cs.ReLU(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
+        self.l3 = cs.Conv2d(int_channels, out_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
+        #NICOLA : folding batchnorm
         self.bn3 = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
 
     def forward(self, x):
+        #NICOLA : vedi se devi quantizzare x
         out = self.l1(x)
         out = self.bn1(out)
         out = self.act1(out)
@@ -67,17 +78,27 @@ class Quant_Residual131_custom(nn.Module):
         out = self.bn3(out)
         return out
 
-
 class Quant_Residual33_custom(nn.Module):
-    def __init__(self, in_channels, out_channels, stride, bias=True):
+    def __init__(self, in_channels, out_channels, stride, bias=True):#NICOLA : aggiungere parametro quantization
         super(Quant_Residual33_custom, self).__init__()
-        self.l1 = nn.Conv2d(in_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias)
-        self.bn1 = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
-        self.act1 = nn.ReLU()
-        self.l2 = nn.Conv2d(out_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=(1, 1), bias=bias)
-        self.bn2 = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
+
+        #NICOLA : questa roba metila sul residual block, che la passa poi ai sottoblocks
+        self.weight_bit = 8
+        self.act_bit = 8
+        self.bias_bit = 16
+        self.quant_method = 'scale'
+        self.quantization = True
+        self.alpha_coeff = 10.0
+
+        self.l1 = cs.Conv2d(in_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
+        #NICOLA : FOLDARE BATCH NORM
+        self.bn1 = cs.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
+        self.act1 = cs.ReLu(alpha=self.alpha_coeff, act_bit=self.act_bit, quantization=self.quantization)
+        self.l2 = cs.Conv2d(out_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=(1, 1), bias=bias, act_bit=self.act_bit, weight_bit=self.weight_bit, bias_bit=self.bias_bit, quantization=self.quantization, quant_method=self.quant_method)
+        self.bn2 = cs.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
 
     def forward(self, x):
+        #NICOLA : vedi se devi quantizzare x o no
         out = self.l1(x)
         out = self.bn1(out)
         out = self.act1(out)
@@ -185,16 +206,37 @@ class Quant_ResidualBlock_brevitas(nn.Module):
 class Quant_Residual131_brevitas(nn.Module):
     def __init__(self, in_channels, int_channels, out_channels, stride=(1, 1), bias=True):
         super(Quant_Residual131_brevitas, self).__init__()
-        self.l1 = nn.Conv2d(in_channels, int_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias)
-        self.bn1 = nn.BatchNorm2d(num_features=int_channels, momentum=0.01, eps=1e-3)
-        self.act1 = nn.ReLU()
-        self.l2 = nn.Conv2d(int_channels, int_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias)
-        self.bn2 = nn.BatchNorm2d(num_features=int_channels, momentum=0.01, eps=1e-3)
-        self.act2 = nn.ReLU()
-        self.l3 = nn.Conv2d(int_channels, out_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias)
-        self.bn3 = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
+        
+        #NICOLA : spostare i seguenti parametri su classi superiori
+        self.weigh_bit = Int8WeightPerTensorFloat 
+        self.act_bit = Uint8ActPerTensorFloat
+        self.bias_bit = Int16Bias
+        self.quant_method = 'scale'
+        self.alpha_coeff = 123.0 # controlla alpha value
+
+    
+        self.l1 = qnn.QuantConv2d(in_channels, int_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias, 
+                                act_bit=self.act_bit, weight_bit=self.weigh_bit, bias_quant=self.bias_bit, 
+                                quantization = self.quantization, quant_method = self.quant_method, return_quant_tensor=True)
+        self.bn1 = qnn.BatchNorm2dToQuantScaleBias(num_features=int_channels, bias_quant=self.bias_bit, 
+                                weight_quant=self.weigh_bit, output_quant=self.act_bit, return_quant_tensor=True, eps=1e-3)
+        self.act1 = qnn.QuantReLU(alpha=self.alpha_coeff)
+        self.l2 = qnn.QuantConv2d(int_channels, int_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias, 
+                                act_bit=self.act_bit, weight_bit=self.weigh_bit,bias_quant=self.bias_bit, 
+                                quantization= self.quantization, quant_method = self.quant_method, output_quant=self.act_bit, 
+                                return_quant_tensor=True)
+        self.bn2 = qnn.BatchNorm2dToQuantScaleBias(num_features=int_channels, bias_quant=self.bias_bit, 
+                                weight_quant=self.weigh_bit,  output_quant=self.act_bit, return_quant_tensor=True, eps=1e-3)
+        self.act2 = qnn.QuantReLU(alpha=self.alpha_coeff)
+        self.l3 = qnn.QuantConv2d(int_channels, out_channels, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias, 
+                                act_bit=self.act_bit, weight_bit=self.weigh_bit, bias_quant=self.bias_bit, 
+                                quantization= self.quantization, quant_method=self.quant_method,output_quant=self.act_bit, 
+                                return_quant_tensor=True)
+        self.bn3 = qnn.BatchNorm2dToQuantScaleBias(num_features=out_channels, bias_quant=self.bias_bit, 
+                                weight_quant=self.weigh_bit, output_quant=self.act_bit, return_quant_tensor=True, eps=1e-3)
 
     def forward(self, x):
+        #VEDERE SE x DA QUANTIZZARE
         out = self.l1(x)
         out = self.bn1(out)
         out = self.act1(out)
@@ -209,11 +251,28 @@ class Quant_Residual131_brevitas(nn.Module):
 class Quant_Residual33_brevitas(nn.Module):
     def __init__(self, in_channels, out_channels, stride, bias=True):
         super(Quant_Residual33_brevitas, self).__init__()
-        self.l1 = nn.Conv2d(in_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias)
-        self.bn1 = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
-        self.act1 = nn.ReLU()
-        self.l2 = nn.Conv2d(out_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=(1, 1), bias=bias)
-        self.bn2 = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
+
+        #NICOLA : spostare i seguenti parametri su classi superiori
+        self.weigh_bit = Int8WeightPerTensorFloat 
+        self.act_bit = Uint8ActPerTensorFloat
+        self.bias_bit = Int16Bias
+        self.quant_method = 'scale'
+        self.alpha_coeff = 123.0 # controlla alpha value     
+
+   
+        self.l1 = qnn.QuantConv2d(in_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=stride, bias=bias, 
+                                act_bit=self.act_bit, weight_bit=self.weigh_bit, bias_quant=self.bias_bit, 
+                                quantization = self.quantization, quant_method = self.quant_method, output_quant=self.act_bit, 
+                                return_quant_tensor=True)
+        self.bn1 = qnn.BatchNorm2dToQuantScaleBias(num_features=out_channels, bias_quant=self.bias_bit, 
+                                weight_quant=self.weigh_bit, output_quant=self.act_bit, return_quant_tensor=True, eps=1e-3)
+        self.act1 = qnn.QuantReLU(alpha=self.alpha_coeff)
+        self.l2 = qnn.QuantConv2d(out_channels, out_channels, kernel_size=(3, 3), padding=(1, 1), stride=(1, 1), bias=bias, 
+                                act_bit=self.act_bit, weight_bit=self.weigh_bit, bias_quant=self.bias_bit, 
+                                quantization = self.quantization, quant_method = self.quant_method, output_quant=self.act_bit,
+                                return_quant_tensor=True)
+        self.bn2 = qnn.BatchNorm2dToQuantScaleBias(num_features=out_channels, bias_quant=self.bias_bit, 
+                                weight_quant=self.weigh_bit, output_quant=self.act_bit, return_quant_tensor=True, eps=1e-3)
 
     def forward(self, x):
         out = self.l1(x)
