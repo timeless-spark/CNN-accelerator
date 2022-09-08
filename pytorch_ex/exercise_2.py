@@ -34,6 +34,10 @@ exercise1_default_optimized.pth respectively. The optimized CNN model is provide
 "saved_models" as "exercise2_cnn.pth"
 """
 
+import matplotlib
+#matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+
 from asyncio import base_tasks
 import torch, torchvision, copy
 from torch import nn
@@ -205,7 +209,148 @@ Path("./saved_models").mkdir(parents=True, exist_ok=True)
 
 torch.save(res_dict, "./saved_models/ex2_res.pth")
 
-### AGIUNGERE PARTE NICOLA..
+### PLOT GRAPHS
+
+res_load = torch.load("./saved_models/ex2_res.pth")
+
+results_nano_resnet = res_load['nano_resnet']
+results_micro_resnet = res_load['micro_resnet']
+results_custom_2 = res_load['custom_2']
+
+
+bs = [] #batch size
+lr = [] #learning rate
+ta = [] #test accuracy
+l = []  #loss
+lc = [] #lowest calss accuracy
+tl = [] #training loss
+al = [] #average loss
+t = []  #time
+ds = [] #default score
+opts = []   #optimized score
+index = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+
+for res in results_nano_resnet:
+    bs.append(res[0])
+    lr.append(res[1])
+    ta.append(res[2])
+    l.append(res[3].cpu().detach().numpy())
+    lc.append(res[4])
+    al.append(res[6])#.detach().numpy())
+    t.append(res[7])
+    ds.append(res[8])
+    opts.append(res[9])
+
+for res in results_micro_resnet:
+    bs.append(res[0])
+    lr.append(res[1])
+    ta.append(res[2])
+    l.append(res[3].cpu().detach().numpy())
+    lc.append(res[4])
+    al.append(res[6])#.detach().numpy())
+    t.append(res[7])
+    ds.append(res[8])
+    opts.append(res[9])
+
+for res in results_custom_2:
+    bs.append(res[0])
+    lr.append(res[1])
+    ta.append(res[2])
+    l.append(res[3].cpu().detach().numpy())
+    lc.append(res[4])
+    al.append(res[6])#.detach().numpy())
+    t.append(res[7])
+    ds.append(res[8])
+    opts.append(res[9])
+
+
+plt.style.use('_mpl-gallery')
+
+# make data
+#x = np.linspace(0, 2, 3)
+x = [12, 16, 32]
+
+#TEST ACCURACY PLOT
+y1 = ta[0:3]
+y2 = ta[3:6]
+y3 = ta[6:9]
+
+
+plt.figure(1)
+plt.plot(x, y1, '-o', label='nano_resnet')
+plt.plot(x, y2, '-o', label='micro_resnet')
+plt.plot(x, y3, '-o', label='custom_2')
+plt.xlabel('Batch size')
+plt.ylabel('Test accuracy')
+plt.legend()
+plt.xticks(x)
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
+
+
+
+#LOWEST CLASS ACCURACY PLOT
+y1 = lc[0:3]
+y2 = lc[3:6]#.detach().numpy()
+y3 = lc[6:9]
+
+
+plt.figure(2)
+plt.plot(x, y1, '-o', label='nano_resnet')
+plt.plot(x, y2, '-o', label = 'micro_resnet')
+plt.plot(x, y3, '-o', label = 'custom_2')
+plt.xlabel('Batch size')
+plt.ylabel('Lowest class accuracy')
+plt.legend()
+plt.xticks(x)
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
+
+
+#LOSS PLOT
+y1 = l[0:3]
+y2 = l[3:6]
+y3 = l[6:9]
+
+
+plt.figure(3)
+plt.plot(x, y1, '-o', label='nano_resnet')
+plt.plot(x, y2, '-o', label = 'micro_resnet')
+plt.plot(x, y3, '-o', label = 'custom_2')
+plt.xlabel('Batch size')
+plt.ylabel('Loss')
+plt.legend()
+plt.xticks(x)
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
+
+
+
+#TIME PLOT
+y1 = t[0:3]
+y2 = t[3:6]
+y3 = t[6:9]
+
+
+plt.figure(4)
+plt.plot(x, y1, '-o', label='nano_resnet')
+plt.plot(x, y2, '-o', label = 'micro_resnet')
+plt.plot(x, y3, '-o', label = 'custom_2')
+plt.xlabel('Batch size')
+plt.ylabel('Time [sec]')
+plt.legend()
+plt.xticks(x)
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
+
+
+plt.show()
+
+
 
 """
 Hints:

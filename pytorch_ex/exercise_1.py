@@ -262,7 +262,7 @@ torch.save(res_dict, "./saved_models/ex1_res.pth")
 
 
 
-### AGIUNGERE PARTE NICOLA..
+### PLOT GRAPHS
 res_load = torch.load("./saved_models/ex1_res.pth")
 
 results = res_load['results']
@@ -290,7 +290,6 @@ for res in results:
     ds.append(res[8])
     opts.append(res[9])
 
-print (t)
 
 plt.style.use('_mpl-gallery')
 
@@ -303,12 +302,15 @@ y2 = ta[12:24]
 
 
 plt.figure(1)
-plt.plot(x, y1, label='epochs=3')
-plt.plot(x, y2, label = 'epochs=5')
+plt.plot(x, y1, '-o', label='epochs=3')
+plt.plot(x, y2, '-o', label = 'epochs=5')
 plt.xlabel('Runs')
 plt.ylabel('Test accuracy')
 plt.legend()
 plt.xticks(np.arange(0, 11, 1))
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
 
 
 #AVERAGE LOSS PLOT
@@ -317,12 +319,15 @@ y2 = al[12:24]#.detach().numpy()
 
 
 plt.figure(2)
-plt.plot(x, y1, label='epochs=3')
-plt.plot(x, y2, label = 'epochs=5')
+plt.plot(x, y1, '-o', label='epochs=3')
+plt.plot(x, y2, '-o', label = 'epochs=5')
 plt.xlabel('Runs')
 plt.ylabel('Avg loss')
 plt.legend()
 plt.xticks(np.arange(0, 11, 1))
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
 
 
 
@@ -332,11 +337,33 @@ y2 = t[12:24]
 
 
 plt.figure(3)
-plt.plot(x, y1, label='epochs=3')
-plt.plot(x, y2, label = 'epochs=5')
+plt.plot(x, y1, '-o', label='epochs=3')
+plt.plot(x, y2, '-o', label = 'epochs=5')
 plt.xlabel('Runs')
-plt.ylabel('Time')
+plt.ylabel('Time [sec]')
 plt.legend()
 plt.xticks(np.arange(0, 11, 1))
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
+
+
+#LOWEST CLASS ACCURACY PLOT
+y1 = lc[0:12]
+y2 = lc[12:24]
+
+
+plt.figure(4)
+plt.plot(x, y1, '-o', label='epochs=3')
+plt.plot(x, y2, '-o', label = 'epochs=5')
+plt.xlabel('Runs')
+plt.ylabel('Lowest class accuracy')
+plt.legend()
+plt.xticks(np.arange(0, 11, 1))
+plt.tight_layout()
+manager = plt.get_current_fig_manager()
+manager.full_screen_toggle()
+
+
 
 plt.show()
