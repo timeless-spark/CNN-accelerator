@@ -88,9 +88,8 @@ class DoReFaWeightQuantization(Function):
     def backward(ctx, grad_out_tensor):
         return grad_out_tensor, None, None, None
 
-#ritornare qui anche zero_point e scaling_factor
-class myDoReFaWeightQuantization():
-    def quantize(real_tensor, min_v, max_v, quant_method):
+#ritornare qui anche zero_point e scaling_factor ?
+def myDoReFaWeightQuantization(real_tensor, min_v, max_v, quant_method):
         tanh = torch.tanh(real_tensor).float()
         float_quant_tensor = 2 * quantization_method[quant_method](
             tanh / (2 * torch.max(torch.abs(tanh)).detach()) + 0.5, min_v, max_v) - 1
@@ -147,6 +146,53 @@ class Conv2d(nn.Conv2d):
             y = F.conv2d(x, wq, bq, self.stride, self.padding, self.dilation, self.groups)
         else:
             y = F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+
+        return y
+
+### "folding-aware" quantized Conv2d layer..
+class Conv2d_folded(nn.Conv2d):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, groups=1, dilation=1, bias=True,
+                 act_bit=8, weight_bit=8, bias_bit=8, quantization=False, quant_method='scale'):
+        super(Conv2d_folded, self).__init__(in_channels, out_channels, kernel_size, stride, padding, groups, dilation, bias)
+        self.quantize = DoReFaWeightQuantization.apply
+        self.act_bit = act_bit
+        self.weight_bit = weight_bit
+        self.bias_bit = bias_bit
+        self.out_channels = out_channels
+
+        self.batch_norm = nn.BatchNorm2d(self.out_channels)
+
+        self.min_v_w = - 2 ** (self.weight_bit - 1) + 1
+        self.max_v_w = 2 ** (self.weight_bit - 1) - 1
+        self.min_v_b = - 2 ** (self.bias_bit - 1) + 1
+        self.max_v_b = 2 ** (self.bias_bit - 1) - 1
+
+        torch.nn.init.kaiming_normal_(self.weight)
+        self.quantization = quantization
+        self.quant_method = quant_method
+
+    def forward(self, x):
+        # fist apply convolution and internal batch normalization
+        y = F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        y = self.batch_norm(y)
+        
+        # if it is quantized the Conv2d weight and bias are changed according to the current running 
+        # mean and variance and quantized back, then the new output with quantized parameters is computed
+        if self.quantization:
+            bn_gamma = self.batch_norm.weight
+            bn_beta = self.batch_norm.bias
+            bn_mean = self.batch_norm.running_mean
+            bn_var = self.batch_norm.running_var
+            bn_eps = self.batch_norm.eps
+            new_weight = self.weight * bn_gamma.reshape((self.out_channels,1,1,1)) / torch.sqrt(bn_var.reshape((self.out_channels,1,1,1)) + bn_eps)
+            wq = self.quantize(new_weight, self.min_v_w, self.max_v_w, self.quant_method)
+            if self.bias is not None:
+                new_bias = ((self.bias - bn_mean) * bn_gamma / torch.sqrt(bn_var + bn_eps)) + bn_beta
+                bq = self.quantize(new_bias, self.min_v_b, self.max_v_b, self.quant_method)
+            else:
+                new_bias = ((torch.zeros((self.out_channels)) - bn_mean) * bn_gamma / torch.sqrt(bn_var + bn_eps)) + bn_beta
+                bq = self.quantize(new_bias, self.min_v_b, self.max_v_b, self.quant_method)
+            y = F.conv2d(x, wq, bq, self.stride, self.padding, self.dilation, self.groups)
 
         return y
 
