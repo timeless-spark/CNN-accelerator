@@ -152,7 +152,7 @@ class Conv2d(nn.Conv2d):
 ### "folding-aware" quantized Conv2d layer..
 class Conv2d_folded(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, groups=1, dilation=1, bias=True,
-                 act_bit=8, weight_bit=8, bias_bit=8, quantization=False, quant_method='scale'):
+                 bn_eps=1e-5, bn_momentum=0.1, act_bit=8, weight_bit=8, bias_bit=8, quantization=False, quant_method='scale'):
         super(Conv2d_folded, self).__init__(in_channels, out_channels, kernel_size, stride, padding, groups, dilation, bias)
         self.quantize = DoReFaWeightQuantization.apply
         self.act_bit = act_bit
@@ -160,7 +160,7 @@ class Conv2d_folded(nn.Conv2d):
         self.bias_bit = bias_bit
         self.out_channels = out_channels
 
-        self.batch_norm = nn.BatchNorm2d(self.out_channels)
+        self.batch_norm = nn.BatchNorm2d(self.out_channels, eps=bn_eps, momentum=bn_momentum)
 
         self.min_v_w = - 2 ** (self.weight_bit - 1) + 1
         self.max_v_w = 2 ** (self.weight_bit - 1) - 1
@@ -190,8 +190,7 @@ class Conv2d_folded(nn.Conv2d):
                 new_bias = ((self.bias - bn_mean) * bn_gamma / torch.sqrt(bn_var + bn_eps)) + bn_beta
                 bq = self.quantize(new_bias, self.min_v_b, self.max_v_b, self.quant_method)
             else:
-                new_bias = ((torch.zeros((self.out_channels)) - bn_mean) * bn_gamma / torch.sqrt(bn_var + bn_eps)) + bn_beta
-                bq = self.quantize(new_bias, self.min_v_b, self.max_v_b, self.quant_method)
+                bq = None
             y = F.conv2d(x, wq, bq, self.stride, self.padding, self.dilation, self.groups)
 
         return y
