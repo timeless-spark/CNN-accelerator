@@ -65,7 +65,7 @@ class micro_resnet(nn.Module):
         super(micro_resnet, self).__init__()
         self.conv2D_1 = nn.Conv2d(1,4,kernel_size=(3,3), stride=(2,2), padding=1)
         self.conv2D_2 = nn.Conv2d(4,16,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.skip1 = nn.MaxPool2d(kernel_size=(4,4), stride=(4,4))
+        self.skip1 = nn.MaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2)
         self.conv2D_3 = nn.Conv2d(16,4, kernel_size=(1,1), stride=(1,1))
         self.conv2D_4 = nn.Conv2d(4,4,kernel_size=(3,3), stride=(2,2), padding=1)
         self.conv2D_5 = nn.Conv2d(4,16,kernel_size=(1,1), stride=(1,1))
@@ -110,7 +110,7 @@ class nano_resnet(nn.Module):
         super(nano_resnet, self).__init__()
         self.conv2D_1 = nn.Conv2d(1,4,kernel_size=(3,3), stride=(2,2), padding=1)
         self.conv2D_2 = nn.Conv2d(4,8,kernel_size=(3,3), stride=(2,2), padding=1)
-        self.skip1 = nn.MaxPool2d(kernel_size=(4,4), stride=(4,4))
+        self.skip1 = nn.MaxPool2d(kernel_size=(5,5), stride=(4,4), padding=2)
         self.conv2D_3 = nn.Conv2d(8,2, kernel_size=(1,1), stride=(1,1))
         self.conv2D_4 = nn.Conv2d(2,2,kernel_size=(3,3), stride=(2,2), padding=1)
         self.conv2D_5 = nn.Conv2d(2,8,kernel_size=(1,1), stride=(1,1))
@@ -253,6 +253,44 @@ class inv_resnet(nn.Module):
         out = self.linear(out)
         return out
 
+class custom_2(nn.Module):
+    def __init__(self):
+        super(custom_2, self).__init__()
+ 
+        self.conv1 = nn.Conv2d(1, 4, kernel_size=3, stride=1, padding="same")   #28*28*4
+        self.conv2 = nn.Conv2d(4, 16, kernel_size=3, stride=2, padding=1)       #14*14*16
+        self.conv3 = nn.Conv2d(16, 4, kernel_size=1, stride=1, padding=1)       #16*16*4
+        self.conv4 = nn.Conv2d(4, 4, kernel_size=3, stride=2, padding=1)        #8*8*4
+        self.maxP1 = nn.MaxPool2d(kernel_size=2, stride=2)                      #4*4*4
+        self.conv5 = nn.Conv2d(4,16, kernel_size=2, stride=1, padding=1)        #5*5*16
+        self.flatten1 = nn.Flatten()
+
+        self.linear1 = nn.Linear(5*5*16, 10)
+
+        self.act = nn.ReLU()
+
+    def forward(self, x):
+        #L1
+        out = self.conv1(x)
+        #L2
+        out = self.conv2(out)
+        out = self.act(out)
+        #L3
+        out = self.conv3(out)
+        out = self.act(out)
+        #L4
+        out = self.conv4(out)
+        out = self.act(out)        
+        out = self.maxP1(out)
+        #L5
+        out = self.conv5(out)
+        out = self.act(out)
+        #L6
+        out = self.flatten1(out)
+        out = self.linear1(out)
+        
+        return out
+
 ###exercize_3 model for only-batch-norm variation
 
 ### taken from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
@@ -319,37 +357,25 @@ class Bottleneck(nn.Module):
 
 ### modified from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 class ResNet(nn.Module):
-    def __init__(self, blocks_conn, layers, drop=0, init=None, sparse_ammount=0):
+    def __init__(self, layers, drop=0, init=None, sparse_ammount=0):
         super().__init__()
 
-        res_conn_type = []
-        for t in blocks_conn:
-            if t:
-                res_conn_type.append(self._make_layer_conv_res)
-            else:
-                res_conn_type.append(self._make_layer_reduced_res)
-        
         ### 32 -> 32
         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
         ### 32 -> 16
-        self.layer1 = res_conn_type[0](32, 32, layers[0], stride=2)
+        self.layer1 = self._make_layer_conv_res(32, 32, layers[0], stride=2)
         ### 16 -> 8
-        self.layer2 = res_conn_type[1](32, 64, layers[1], stride=2)
+        self.layer2 = self._make_layer_conv_res(32, 64, layers[1], stride=2)
         ### 8 -> 4
-        self.layer3 = res_conn_type[2](64, 128, layers[2], stride=2)
-        '''
-        ### 8 -> 2
-        self.avgpool = nn.AvgPool2d(kernel_size=4, stride=3, padding=0)
-        '''
+        self.layer3 = self._make_layer_conv_res(64, 128, layers[2], stride=2)
+        
         ### 4 -> 1
         self.avgpool = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
         
         self.relu = nn.ReLU(inplace=True)
         self.flatten = nn.Flatten()
-        '''
-        self.linear = nn.Linear(512, 10)
-        '''
+        
         self.dropout = nn.Dropout(drop)
         self.linear = nn.Linear(128, 10)
 
@@ -358,7 +384,7 @@ class ResNet(nn.Module):
             if isinstance(m, nn.Conv2d):
                 if init is not None:
                     if init == "normal":
-                        nn.init.normal_(m.weight, std=1.0)
+                        nn.init.normal_(m.weight, mean=1.0, std=2.0)
                     elif init == "sparse":
                       #PYTORCH SPARSE INIT GIVES PROBLEMS IN TRAINING SOMEHOW..
                         #for i in range(m.weight.shape[0]):
@@ -377,6 +403,7 @@ class ResNet(nn.Module):
                 else:
                     nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu') 
             elif isinstance(m, nn.BatchNorm2d):
+                #batch norm initialized according to paper https://arxiv.org/abs/2003.00152
                 nn.init.uniform_(m.weight, a=0, b=1)
                 nn.init.constant_(m.bias, 0)
             
@@ -420,16 +447,16 @@ class ResNet(nn.Module):
 #   - 13 bn layers
 #   - 1 fc
 def isaResNet_14():
-    model = ResNet([True, True, True], [1, 1, 2])
-    return model, "isaResNet_14"
+    model = ResNet([1, 1, 2])
+    return model, "isaResNet_14_downsample_loss"
 
 ### resnet model with bottleneck:
 #   - 37 conv layers
 #   - 37 bn layers
 #   - 1 fc
 def isaResNet_38():
-    model = ResNet([True, True, True], [3, 3, 6])
-    return model, "isaResNet_38"
+    model = ResNet([3, 3, 6])
+    return model, "isaResNet_38_downsample_loss"
 
 ### resnet model with bottleneck:
 #   - 109 conv layers
@@ -437,19 +464,23 @@ def isaResNet_38():
 #   - 1 fc
   # standard version
 def isaResNet_110():
-    model = ResNet([True, True, True], [12, 12, 12])
+    model = ResNet([12, 12, 12])
     return model, "isaResNet_110"
   # wide normal distr initialization version
 def isaResNet_110_normal():
-    model = ResNet([True, True, True], [12, 12, 12], init="normal")
+    model = ResNet([12, 12, 12], init="normal")
     return model, "isaResNet_110_normal"
   # sparse matrix version
-def isaResNet_110_sparse():
-    model = ResNet([True, True, True], [12, 12, 12], init="sparse", sparse_ammount=0.5)
-    return model, "isaResNet_110_sparse"
+def isaResNet_110_sparse_50():
+    model = ResNet([12, 12, 12], init="sparse", sparse_ammount=0.5)
+    return model, "isaResNet_110_sparse_50"
+  # dropout version
+def isaResNet_110_sparse_80():
+    model = ResNet([12, 12, 12], init="sparse", sparse_ammount=0.8)
+    return model, "isaResNet_110_sparse_80"
   # dropout version
 def isaResNet_110_dropout():
-    model = ResNet([True, True, True], [12, 12, 12], drop=0.5)
+    model = ResNet([12, 12, 12], drop=0.3)
     return model, "isaResNet_110_dropout"
 
 ### resnet model with bottleneck:
@@ -457,8 +488,8 @@ def isaResNet_110_dropout():
 #   - 289 bn layers
 #   - 1 fc
 def isaResNet_290():
-    model = ResNet([True, False, False], [32, 32, 32], init="normal")
-    return model, "isaResNet_290"
+    model = ResNet([32, 32, 32], init="sparse", sparse_ammount=0.5)
+    return model, "isaResNet_290_downsample_loss_sparse"
 
 ###exercize_3 model for the standard exercize
 
