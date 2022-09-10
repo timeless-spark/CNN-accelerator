@@ -159,6 +159,8 @@ tr_dict = torch.load(base_path + "saved_models/exercise3.pth", map_location=torc
 classes = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 colors = ['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:pink','tab:grey','tab:olive','tab:cyan']
 
+Path(base_path + "ex3_figures").mkdir(parents=True, exist_ok=True)
+
 for model_type in model_list:
     model, name = model_type[0](), model_type[1]
     print("Validation Accuracy for {:s} is: {:.1f} %".format(name, tr_dict[name]["model_state_dict"][1] * 100))
@@ -178,7 +180,7 @@ for model_type in model_list:
         i += 1
 
     plt.plot(x_axis, y_axix, linewidth=2.0)
-    plt.savefig(f"ex3bis_figures/{name}_training_loss.png")
+    plt.savefig(base_path + f"ex3_figures/{name}_training_loss.png")
     plt.clf()
 
     #validation loss during training
@@ -190,7 +192,7 @@ for model_type in model_list:
         i += 1
 
     plt.plot(x_axis, y_axix, linewidth=2.0)
-    plt.savefig(f"ex3bis_figures/{name}_validation_loss.png")
+    plt.savefig(base_path + f"ex3_figures/{name}_validation_loss.png")
     plt.clf()
 
     #validation accuracy during training
@@ -202,7 +204,7 @@ for model_type in model_list:
         i += 1
     
     plt.plot(x_axis, y_axix, linewidth=2.0)
-    plt.savefig(f"ex3bis_figures/{name}_validation_accuracy.png")
+    plt.savefig(base_path + f"ex3_figures/{name}_validation_accuracy.png")
     plt.clf()
 
     #test accuracy
@@ -236,7 +238,7 @@ for model_type in model_list:
     
     plt.figure(figsize=[9.6, 4.8])
     plt.bar(x_axis, y_axix, color=colors, width=0.8, tick_label=classes)
-    plt.savefig(f"ex3bis_figures/{name}_single_class_accuracy.png")
+    plt.savefig(base_path + f"ex3_figures/{name}_single_class_accuracy.png")
     plt.clf()
 
     print("Worst class accuracy is %.4f for class %s\n" %(min_correct[1], min_correct[0]))
