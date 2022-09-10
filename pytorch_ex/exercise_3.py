@@ -55,7 +55,7 @@ def train(dataloader, model, loss_fn, optimizer, loss_list):
             loss_list.append(loss / 100)
     return loss
 
-def test(dataloader, model, loss_fn, loss_list=None):
+def test(dataloader, model, loss_fn, loss_list=None, verbose=True):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
@@ -70,7 +70,8 @@ def test(dataloader, model, loss_fn, loss_list=None):
     correct /= size
     if loss_list is not None:
         loss_list.append(test_loss)
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f}")
+    if verbose:
+        print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f}")
     return correct
 
 ###training parameters (according to the paper..)
@@ -158,9 +159,10 @@ tr_dict = torch.load(base_path + "saved_models/exercise3.pth", map_location=torc
 classes = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 colors = ['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:pink','tab:grey','tab:olive','tab:cyan']
 
-for func in range(1):
-    model, name = model_list[0]()
-    model.load_state_dict(tr_dict[name]["model_state_dict"])
+for model_type in model_list:
+    model, name = model_type[0](), model_type[1]
+    print("Validation Accuracy for {:s} is: {:.1f} %".format(name, tr_dict[name]["model_state_dict"][1] * 100))
+    model.load_state_dict(tr_dict[name]["model_state_dict"][0])
     model.to(device)
 
     #training loss
@@ -176,8 +178,8 @@ for func in range(1):
         i += 1
 
     plt.plot(x_axis, y_axix, linewidth=2.0)
-
-    plt.show()
+    plt.savefig(f"ex3bis_figures/{name}_training_loss.png")
+    plt.clf()
 
     #validation loss during training
     x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
@@ -188,8 +190,8 @@ for func in range(1):
         i += 1
 
     plt.plot(x_axis, y_axix, linewidth=2.0)
-
-    plt.show()
+    plt.savefig(f"ex3bis_figures/{name}_validation_loss.png")
+    plt.clf()
 
     #validation accuracy during training
     x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
@@ -200,11 +202,11 @@ for func in range(1):
         i += 1
     
     plt.plot(x_axis, y_axix, linewidth=2.0)
+    plt.savefig(f"ex3bis_figures/{name}_validation_accuracy.png")
+    plt.clf()
 
-    plt.show()
-    
     #test accuracy
-    accuracy = test(test_dataloader, model, loss_fn)
+    accuracy = test(test_dataloader, model, loss_fn, verbose=False)
     print("Test Accuracy for {:s} is: {:.1f} %".format(name, accuracy * 100))
 
     correct_pred = {classname: 0 for classname in classes}
@@ -220,20 +222,21 @@ for func in range(1):
                     correct_pred[classes[label]] += 1
                 total_pred[classes[label]] += 1
 
-    x_axis = 0.5 + np.arange(len(classes))
-    y_axix = np.empty_like(x_axis)
+    x_axis = x = 0.5 + np.arange(10)
+    y_axix = np.empty(len(classes))
     i = 0
     min_correct = [0,110]
     for classname, correct_count in correct_pred.items():
         accuracy = 100 * float(correct_count) / total_pred[classname]
         if min_correct[1] >= int(accuracy):
             min_correct = [classname, accuracy]
-        print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
+        #print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
         y_axix[i] = accuracy
         i += 1
     
-    plt.bar(classes, y_axix, color=colors)
+    plt.figure(figsize=[9.6, 4.8])
+    plt.bar(x_axis, y_axix, color=colors, width=0.8, tick_label=classes)
+    plt.savefig(f"ex3bis_figures/{name}_single_class_accuracy.png")
+    plt.clf()
 
-    plt.show()
-
-    print("Worst class accuracy is %.4f for class %s" %(min_correct[1], min_correct[0]))
+    print("Worst class accuracy is %.4f for class %s\n" %(min_correct[1], min_correct[0]))
