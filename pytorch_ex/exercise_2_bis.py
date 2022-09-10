@@ -106,9 +106,6 @@ writer.add_image(str(batch_size)+'_FashionMNIST_images', img_grid)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 
-loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([7.,.5,5,7,7,.5,15.,.5,.5,.5]).cuda())
-#loss_fn = nn.CrossEntropyLoss()
-
 def train(dataloader, model, loss_fn, optimizer, loss_list, batch_size):
     size = len(dataloader.dataset)
     model.train()
@@ -148,9 +145,11 @@ def test(dataloader, model, loss_fn, loss_list=None):
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
     return correct
 
-batch_size = [12]
+batch = 12
 epochs = 5
 lr = 1e-2
+
+loss_fn_list = [nn.CrossEntropyLoss(),  nn.CrossEntropyLoss(weight=torch.tensor([7.,.5,5,7,7,.5,15.,.5,.5,.5]).to(device))]
 
 res_dict = {
     "mini_resnet": [],
@@ -165,7 +164,7 @@ for model_type in model_list:
     model_parameters = filter(lambda p: p.requires_grad, model_type().parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     memory = params * 32 / 8 / 1024 / 1024
-    for batch in batch_size:
+    for loss_fn in loss_fn_list:
         model = model_type()
         model.to(device)
         train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
@@ -218,10 +217,12 @@ for model_type in model_list:
                     total_pred[classes[label]] += 1
 
         min_correct = [0,110]
+        per_class_acc = []
         for classname, correct_count in correct_pred.items():
             accuracy = 100 * float(correct_count) / total_pred[classname]
             if min_correct[1] >= int(accuracy):
                 min_correct = [classname, accuracy]
+            per_class_acc.append(accuracy)
             print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
 
         lowest_class_accuracy = min_correct[1]
@@ -232,13 +233,13 @@ for model_type in model_list:
         optimized_score = (2.555/memory) * 0.2 + (lowest_class_accuracy/68.40) * 0.3 + (669706.0/params) * 0.3 + (5/epochs) * 0.2
         opt_CNN_score = (0.1233/memory) * 0.2 + (lowest_class_accuracy/70.5) * 0.3 + (32314.0/params) * 0.3 + (5/epochs) * 0.2
 
-        res_dict[name_list[index]].append([batch, lr, opt_model["test_acc"], opt_model["loss"], lowest_class_accuracy, training_loss, avg_loss, total_time, default_score, optimized_score, opt_CNN_score])
+        res_dict[name_list[index]].append([batch, lr, opt_model["test_acc"], opt_model["loss"], lowest_class_accuracy, per_class_acc, training_loss, avg_loss, total_time, default_score, optimized_score, opt_CNN_score])
 
     index += 1
 
 Path("./saved_models").mkdir(parents=True, exist_ok=True)
 
-torch.save(res_dict, "./saved_models/ex2bit_res.pth")
+torch.save(res_dict, "./saved_models/ex2bis_res.pth")
 
 ### PLOT GRAPHS
 
