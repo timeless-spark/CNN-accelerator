@@ -74,7 +74,7 @@ def test(dataloader, model, loss_fn, loss_list=None, verbose=True):
         print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f}")
     return correct
 
-###training parameters (according to the paper..)
+###training parameters
 batch_size = 128
 lr = 1e-1
 L2_lambda = 1e-5
@@ -163,7 +163,9 @@ Path(base_path + "ex3_figures").mkdir(parents=True, exist_ok=True)
 
 for model_type in model_list:
     model, name = model_type[0](), model_type[1]
-    print("Validation Accuracy for {:s} is: {:.1f} %".format(name, tr_dict[name]["model_state_dict"][1] * 100))
+    print(name, ":")
+    print("\tLearnable parameters: {:d}".format(tr_dict[name]["learnable_params"]))
+    print("\tValidation Accuracy: {:.1f} %".format(tr_dict[name]["model_state_dict"][1] * 100))
     model.load_state_dict(tr_dict[name]["model_state_dict"][0])
     model.to(device)
 
@@ -172,27 +174,29 @@ for model_type in model_list:
     n_ele = len(tr_dict[name]["training_loss"])
     n_epoch = tr_dict[name]["epoch_done"]
     start = n_epoch / n_ele
-    x_axis = np.linspace(start, n_epoch, n_ele)
-    y_axix = np.empty_like(x_axis)
+    tr_x_axis = np.linspace(start, n_epoch, n_ele)
+    tr_y_axix = np.empty_like(tr_x_axis)
     i = 0
     for val in tr_dict[name]["training_loss"]:
-        y_axix[i] = val
+        tr_y_axix[i] = val * 100
         i += 1
-
-    plt.plot(x_axis, y_axix, linewidth=2.0)
-    plt.savefig(base_path + f"ex3_figures/{name}_training_loss.png")
-    plt.clf()
 
     #validation loss during training
-    x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
-    y_axix = np.empty_like(x_axis)
+    val_x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
+    val_y_axix = np.empty_like(val_x_axis)
     i = 0
     for val in tr_dict[name]["validation_loss"]:
-        y_axix[i] = val
+        val_y_axix[i] = val
         i += 1
 
-    plt.plot(x_axis, y_axix, linewidth=2.0)
-    plt.savefig(base_path + f"ex3_figures/{name}_validation_loss.png")
+    plt.figure(figsize=[6.4, 4.8])
+    plt.plot(tr_x_axis, tr_y_axix, linewidth=2.0, label="Training loss")
+    plt.plot(val_x_axis, val_y_axix, linewidth=3.0, label="Validation loss")
+    plt.ylim(top=3)
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend(["Training loss", "Validation loss"])
+    plt.savefig(base_path + f"ex3_figures/{name}_loss_training_loss.png")
     plt.clf()
 
     #validation accuracy during training
@@ -203,13 +207,16 @@ for model_type in model_list:
         y_axix[i] = val
         i += 1
     
-    plt.plot(x_axis, y_axix, linewidth=2.0)
-    plt.savefig(base_path + f"ex3_figures/{name}_validation_accuracy.png")
+    plt.plot(x_axis, y_axix, linewidth=3.0)
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.legend(["Validation accuracy"])
+    plt.savefig(base_path + f"ex3_figures/{name}_loss_validation_accuracy.png")
     plt.clf()
 
     #test accuracy
     accuracy = test(test_dataloader, model, loss_fn, verbose=False)
-    print("Test Accuracy for {:s} is: {:.1f} %".format(name, accuracy * 100))
+    print("\tTest Accuracy: {:.1f} %".format(accuracy * 100))
 
     correct_pred = {classname: 0 for classname in classes}
     total_pred = {classname: 0 for classname in classes}
@@ -236,9 +243,10 @@ for model_type in model_list:
         y_axix[i] = accuracy
         i += 1
     
-    plt.figure(figsize=[9.6, 4.8])
-    plt.bar(x_axis, y_axix, color=colors, width=0.8, tick_label=classes)
-    plt.savefig(base_path + f"ex3_figures/{name}_single_class_accuracy.png")
+    plt.figure(figsize=[12.8, 4.8])
+    plt.bar(x_axis, y_axix, color=colors, width=0.9, tick_label=classes)
+    plt.ylabel("Accuracy")
+    plt.savefig(base_path + f"ex3_figures/{name}_loss_single_class_accuracy.png")
     plt.clf()
 
-    print("Worst class accuracy is %.4f for class %s\n" %(min_correct[1], min_correct[0]))
+    print("\tMin per-class accuracy is %.4f for class %s\n" %(min_correct[1], min_correct[0]))
