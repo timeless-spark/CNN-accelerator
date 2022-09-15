@@ -63,17 +63,6 @@ test_data = datasets.MNIST(root="data", train=False, download=True, transform=tr
 #best_workers = find_num_workers(training_data=training_data, batch_size=batch_size)
 best_workers = 6
 
-'''
-for X, y in test_dataloader:
-    print("Shape of X [N, C, H, W]: ", X.shape)
-    print("Shape of y: ", y.shape, y.dtype)
-    break
-print(test_data.classes)
-dataiter = iter(copy.deepcopy(test_dataloader))
-images, labels = dataiter.next()
-img_grid = torchvision.utils.make_grid(images)
-writer.add_image(str(batch_size)+'_mnist_images', img_grid)
-'''
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 
