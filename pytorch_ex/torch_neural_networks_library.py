@@ -451,12 +451,12 @@ def isaResNet_14():
     return model, "isaResNet_14_downsample_loss"
 
 ### resnet model with bottleneck:
-#   - 37 conv layers
-#   - 37 bn layers
+#   - 56 conv layers
+#   - 56 bn layers
 #   - 1 fc
-def isaResNet_38():
-    model = ResNet([3, 3, 6])
-    return model, "isaResNet_38_downsample_loss"
+def isaResNet_56():
+    model = ResNet([6, 6, 6])
+    return model, "isaResNet_56_downsample_loss"
 
 ### resnet model with bottleneck:
 #   - 109 conv layers
