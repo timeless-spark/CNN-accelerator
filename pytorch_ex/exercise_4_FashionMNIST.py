@@ -1,3 +1,4 @@
+from math import remainder
 from pickletools import optimize
 import torch, torchvision, copy
 from torch import nn, true_divide
@@ -6,8 +7,9 @@ from torchvision import datasets
 from torchvision.transforms import transforms
 import numpy as np
 from tqdm import tqdm
-from exercise_4 import dummyModel, quant_custom_mini_resnet, quant_brevitas_mini_resnet, PACT_QuantReLU
+from exercise_4 import quant_custom_mini_resnet, quant_custom_mini_resnet_folded, quant_brevitas_mini_resnet, PACT_QuantReLU
 import quantization as cs
+from quantization import myDoReFaWeightQuantization
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 import brevitas.config
@@ -15,12 +17,13 @@ from brevitas.export.onnx.finn.manager import FINNManager
 from brevitas.export.onnx.generic.manager import BrevitasONNXManager
 import brevitas.nn as qnn
 from brevitas.quant_tensor import QuantTensor 
+import re
 
 brevitas.config.IGNORE_MISSING_KEYS=True
 
-Path("./runs/exercise_4_FashionMNIST").mkdir(parents=True, exist_ok=True)  # check if runs directory for tensorboard exist, if not create one
+base_path = "./"
 
-writer = SummaryWriter('runs/exercise_FashionMNIST')
+Path(base_path + "saved_models").mkdir(parents=True, exist_ok=True)
 
 transform_train = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.2862], std=[0.3204]), transforms.RandomHorizontalFlip()])
 transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=[0.2862], std=[0.3204])])
@@ -28,26 +31,23 @@ transform_test = transforms.Compose([transforms.ToTensor(), transforms.Normalize
 training_data, validation_data = random_split(datasets.FashionMNIST(root="data", train=True, download=True, transform=transform_train), [50000, 10000])
 test_data = datasets.FashionMNIST(root="data", train=False, download=True, transform=transform_test)
 
-FINN_save = True
+initialize_dict = True
 best_workers = 2
 
 device = "cpu" #"cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 #device = "cpu"
 
-model = quant_brevitas_mini_resnet()
-#prova = model.quant_method
-model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+#model_list = [(quant_custom_mini_resnet_folded, "quant_custom_mini_resnet_folded_8", 5e-3, 8, 8, 16, "scale"), (quant_custom_mini_resnet_folded, "quant_custom_mini_resnet_folded_16", 5e-3, 16, 16, 32, "scale")]
+model_list = [(quant_custom_mini_resnet_folded, "quant_custom_mini_resnet_folded_4", 8e-4, 4, 4, 8, "scale")]
+#model_list = [(quant_brevitas_mini_resnet, "quant_brevitas_mini_resnet", 5e-3)]
 
-params = sum([np.prod(p.size()) for p in model_parameters])
-memory = params * 32 / 8 / 1024 / 1024
-print("this model has ", params, " parameters")
-print("total weight memory is %.4f MB" %(memory))
+for p in model_list:
+    print(p[1])
 
-#loss_fn = nn.CrossEntropyLoss()
-loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1.,0.5,1.1,0.55,1.,0.5,2.5,0.5,0.5,0.5]))
+brevitas_model = False
 
-def train(dataloader, model, loss_fn, optimizer, epoch):
+def train(dataloader, model, loss_fn, optimizer, loss_list=None):
     size = len(dataloader.dataset)
     model.train()
     for batch, (X, y) in enumerate(dataloader):
@@ -59,20 +59,17 @@ def train(dataloader, model, loss_fn, optimizer, epoch):
 
         # Backpropagation
         optimizer.zero_grad()
-        #alpha_opt.zero_grad()
-
         loss.backward()
-
         optimizer.step()
-        #alpha_opt.step()
 
-        if batch % 100 == 0:
+        if batch % 120 == 0:
             loss, current = loss.item(), batch * len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
-            writer.add_scalar('training loss', loss / 100, epoch * len(dataloader) + batch)
+            if loss_list is not None:
+                loss_list.append(loss / 100)
     return loss
 
-def test(dataloader, model, loss_fn):
+def test(dataloader, model, loss_fn, loss_list=None, verbose=True):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
@@ -82,145 +79,288 @@ def test(dataloader, model, loss_fn):
             X, y = X.to(device), y.to(device)
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            if isinstance(pred, torch.Tensor):
+                correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            else:
+                correct += (pred.value.argmax(1) == y).type(torch.float).sum().item()
     test_loss /= num_batches
     correct /= size
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    if loss_list is not None:
+        loss_list.append(test_loss)
+    if verbose:
+        print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f}")
     return correct
 
-batch_size = [32]
-lr = 1e-3
-epochs = 1
-best_correct = 0
-Train = False
-Path("./saved_models").mkdir(parents=True, exist_ok=True)
-print("Use $ tensorboard --logdir=runs/exercise_FashionMNIST to access training statistics")
-if Train == True:
-    for batch in batch_size:
-        model = quant_brevitas_mini_resnet()
-        model.to(device)
+loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1.,0.5,1.1,0.55,1.,0.5,2.5,0.5,0.5,0.5]))
 
-        train_dataloader = DataLoader(training_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
-        validation_dataloader = DataLoader(validation_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
-        test_dataloader = DataLoader(test_data, batch_size=batch, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
-        
+batch_size = 64
+L2_lambda = 1e-9
+epochs = 60
+
+train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+validation_dataloader = DataLoader(validation_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True, num_workers=best_workers, pin_memory=torch.cuda.is_available())
+
+print("train dataset samples: ", len(train_dataloader.dataset))
+print("validation dataset samples: ", len(validation_dataloader.dataset))
+print("test dataset samples: ", len(test_dataloader.dataset))
+
+if initialize_dict:
+    tr_dict = {}
+
+    for model_type in model_list:
+        if brevitas_model:
+            model = model_type[0]()
+        else:
+            model = model_type[0](model_type[3], model_type[4], model_type[5], model_type[6])
+        name = model_type[1]
+        lr = model_type[2]
+        wd = L2_lambda/lr
         params = model.parameters()
-        '''
-        alpha_par = list()
-        for mod in model.modules():
-            
-            if isinstance(mod, cs.ReLu):
-                alpha_par += list(mod.parameters())
-            else:
-                params += list(mod.parameters())
+        optimizer = torch.optim.SGD(params, weight_decay=wd, lr=lr, momentum=0.8)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[35, 50], gamma=0.1)
+        tr_dict[name] = {
+            "model_state_dict": [model.state_dict(), 0],
+            "learnable_params": sum(torch.numel(p) for p in model.parameters()),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "epoch_done": 0,
+            "training_loss": [],
+            "validation_loss": [],
+            "validation_acc": []
+        }
+    torch.save(tr_dict, base_path + "saved_models/exercise4_FashionMNIST.pth")
 
-            if isinstance(mod, PACT_QuantReLU):
-                alpha_par += list(mod.parameters())
-            else:
-                params += list(mod.parameters())
-            
-        '''
-        ### should alpha have its own weight_decay ??
-        '''
-        optimizer = torch.optim.SGD(params, weight_decay=0.001, lr=lr)
-        alpha_opt = torch.optim.SGD(alpha_par, weight_decay=0.01, lr=lr)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[6,8], gamma=0.2, verbose=True)
-        alpha_sched = torch.optim.lr_scheduler.MultiStepLR(alpha_opt, milestones=[6,8], gamma=0.2, verbose=True)
-        '''
-        optimizer = torch.optim.Adam(params, lr, amsgrad=False, weight_decay=1e-10)
+tr_dict = torch.load(base_path + "saved_models/exercise4_FashionMNIST.pth")
 
-        print(f"using: batch={batch}, n_ep={epochs}, lr={lr}")
-        for t in tqdm(range(epochs)):
+for model_type in model_list:
+    if not brevitas_model:
+        model, name = model_type[0](model_type[3], model_type[4], model_type[5], model_type[6]), model_type[1]
+    else:
+        model, name = model_type[0](), model_type[1]
+    lr = model_type[2]
+    wd = L2_lambda/lr
+    print(name)
+    if tr_dict[name]["epoch_done"] < epochs:
+        print("training model: ", name)
+        model.load_state_dict(tr_dict[name]["model_state_dict"][0])
+        model.to(device)
+        params = model.parameters()
+        optimizer = torch.optim.SGD(params, weight_decay=wd, lr=lr, momentum=0.8)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[35, 50], gamma=0.1)
+        optimizer.load_state_dict(tr_dict[name]["optimizer_state_dict"])
+        scheduler.load_state_dict(tr_dict[name]["scheduler_state_dict"])
+        if tr_dict[name]["epoch_done"] == 0:
+            best_acc = 0
+        else:
+            best_acc = tr_dict[name]["model_state_dict"][1]
+
+        for t in tqdm(range(epochs - tr_dict[name]["epoch_done"])):
             print(f"Epoch {t+1}\n-------------------------------")
-            loss = train(train_dataloader, model, loss_fn, optimizer, t)
-            current_correct = test(validation_dataloader, model, loss_fn)
-            '''
+            loss = train(train_dataloader, model, loss_fn, optimizer, tr_dict[name]["training_loss"])
+            current_acc = test(validation_dataloader, model, loss_fn, tr_dict[name]["validation_loss"])
             scheduler.step()
-            alpha_sched.step()
-            '''
-            writer.add_scalar('test accuracy', current_correct, t)
-            writer.flush()
-            if current_correct > best_correct:
-                best_correct = current_correct
-                torch.save({
-                    "batch_size": batch,
-                    "lr": lr,
-                    'epoch': t,
-                    'model_state_dict': model.state_dict(),
-                    'loss': loss,
-                    'test_acc': current_correct,
-                }, "./saved_models/exercise4FashionMNIST.pth")
-        #break
+            tr_dict[name]["validation_acc"].append(current_acc * 100)
+            tr_dict[name]["epoch_done"] += 1
+            tr_dict[name]["optimizer_state_dict"] = optimizer.state_dict()
+            tr_dict[name]["scheduler_state_dict"] = scheduler.state_dict()
+            if current_acc > best_acc:
+                best_acc = current_acc
+                tr_dict[name]["model_state_dict"] = [model.state_dict(), best_acc]
+            torch.save(tr_dict, base_path + "saved_models/exercise4_FashionMNIST.pth")
+            print(f"lr: {optimizer.param_groups[0]['lr']:0.2e}\n")
 
-model = dummyModel()
-#model = dummyModel()
+###-----
 
-writer.close()
+import numpy as np
+import matplotlib
+matplotlib.use("TKAgg")
+import matplotlib.pyplot as plt
+
+tr_dict = torch.load(base_path + "saved_models/exercise4_FashionMNIST.pth")
+
 classes = ('T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot')
+colors = ['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:pink','tab:grey','tab:olive','tab:cyan']
 
-correct_pred = {classname: 0 for classname in classes}
-total_pred = {classname: 0 for classname in classes}
+Path(base_path + "ex4_figures_FM").mkdir(parents=True, exist_ok=True)
 
-test_dataloader = DataLoader(test_data, batch_size=32, shuffle=True, num_workers=best_workers, pin_memory=False)#torch.cuda.is_available())
-"""
-###switch to brevitas
-model = quant_brevitas_mini_resnet()
-#brevitas_state_dict = torch.load("./saved_models/brevitas.pth")["model_state_dict"]
-min_v = model.min_v_w
-max_v = model.max_v_w
-quant_method = model.quant_method
-###load the best model for brevitas check
-opt_model = torch.load("./saved_models/exercise4FashionMNIST.pth")
-print(opt_model["test_acc"])
-opt_state_dict = opt_model["model_state_dict"]
-###quantize parameters back
-for tensor in opt_state_dict:
-    opt_state_dict[tensor] = cs.myDoReFaWeightQuantization.quantize(opt_model["model_state_dict"][tensor], min_v, max_v, quant_method)
-'''
-opt_state_dict["identity.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"] = brevitas_state_dict["identity.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"]
-opt_state_dict["act_1.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"] = brevitas_state_dict["act_1.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"]
-opt_state_dict["act_2.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"] = brevitas_state_dict["act_2.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"]
-opt_state_dict["act_3.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"] = brevitas_state_dict["act_3.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"]
-opt_state_dict["act_4.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"] = brevitas_state_dict["act_4.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"]
-opt_state_dict["act_5.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"] = brevitas_state_dict["act_5.relu.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl.value"]
-'''
+for model_type in model_list:
+    if not brevitas_model:
+        model, name = model_type[0](model_type[3], model_type[4], model_type[5], model_type[6]), model_type[1]
+    else:
+        model, name = model_type[0](), model_type[1]
+    print(name, ":")
+    print("\tLearnable parameters: {:d}".format(tr_dict[name]["learnable_params"]))
+    print("\tValidation Accuracy: {:.1f} %".format(tr_dict[name]["model_state_dict"][1] * 100))
+    model.load_state_dict(tr_dict[name]["model_state_dict"][0])
+    model.to(device)
 
-###load the dictionary
-model.load_state_dict(opt_state_dict)
+    #training loss
+    n_ele = len(tr_dict[name]["training_loss"])
+    n_epoch = tr_dict[name]["epoch_done"]
+    start = n_epoch / n_ele
+    tr_x_axis = np.linspace(start, n_epoch, n_ele)
+    tr_y_axix = np.empty_like(tr_x_axis)
+    i = 0
+    for val in tr_dict[name]["training_loss"]:
+        tr_y_axix[i] = val * 100
+        i += 1
 
-with torch.no_grad():
-    for X, y in test_dataloader:
-        images, labels = X.to(device), y.to(device)
-        outputs = model(images)
-        _, predictions = torch.max(outputs, 1)
-        for label, prediction in zip(labels, predictions):
-            if label == prediction:
-                correct_pred[classes[label]] += 1
-            total_pred[classes[label]] += 1
+    #validation loss during training
+    val_x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
+    val_y_axix = np.empty_like(val_x_axis)
+    i = 0
+    for val in tr_dict[name]["validation_loss"]:
+        val_y_axix[i] = val
+        i += 1
 
-min_correct = [0,110]
-for classname, correct_count in correct_pred.items():
-    accuracy = 100 * float(correct_count) / total_pred[classname]
-    if min_correct[1] >= int(accuracy):
-        min_correct = [classname, accuracy]
-    print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
+    plt.figure(figsize=[6.4, 4.8])
+    plt.plot(tr_x_axis, tr_y_axix, linewidth=2.0, label="Training loss")
+    plt.plot(val_x_axis, val_y_axix, linewidth=3.0, label="Validation loss")
+    plt.ylim(top=3, bottom=0)
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend(["Training loss", "Validation loss"])
+    plt.savefig(base_path + f"ex4_figures_FM/{name}_loss_training_loss.png")
+    plt.clf()
 
-lowest_class_accuracy = min_correct[1]
+    #validation accuracy during training
+    x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
+    y_axix = np.empty_like(x_axis)
+    i = 0
+    for val in tr_dict[name]["validation_acc"]:
+        y_axix[i] = val
+        i += 1
+    
+    plt.plot(x_axis, y_axix, linewidth=3.0)
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.legend(["Validation accuracy"])
+    plt.savefig(base_path + f"ex4_figures_FM/{name}_loss_validation_accuracy.png")
+    plt.clf()
 
-print("Worst class accuracy is %.4f for class %s" %(min_correct[1], min_correct[0]))
-"""
-if FINN_save:
-    #if dataset_type == 'FashionMNIST':
-    in_tensor = (1, 1, 28, 28)
-    input_qt = np.random.randint(0, 255, in_tensor).astype(np.float32)
-    #elif dataset_type == 'CIFAR10':
-    #    in_tensor = (1, 3, 32, 32)
-    #else:
-    #    exit("invalid dataset")
-FINNManager.export(model.to("cpu"), export_path="./FINN_export_dummy/" + "FashionMNISTfinn.onnx", input_shape=in_tensor)#, input_t = QuantTensor(torch.from_numpy(input_qt), signed = False, scale=torch.tensor(1.0), bit_width=torch.tensor(8.0)))
-BrevitasONNXManager.export(model.cpu(), export_path="./FINN_export_dummy/" + "FashionMNISTbrevitas.onnx", input_shape=in_tensor)#, input_t = QuantTensor(torch.from_numpy(input_qt), signed = False, scale=torch.tensor(1.0), bit_width=torch.tensor(8.0)))
-print("Succesfully written FINN export files!")
+    #test accuracy
+    accuracy = test(test_dataloader, model, loss_fn, verbose=False)
+    print("\tTest Accuracy: {:.1f} %".format(accuracy * 100))
 
+    correct_pred = {classname: 0 for classname in classes}
+    total_pred = {classname: 0 for classname in classes}
+
+    with torch.no_grad():
+        for X, y in test_dataloader:
+            images, labels = X.to(device), y.to(device)
+            outputs = model(images)
+            _, predictions = torch.max(outputs, 1)
+            for label, prediction in zip(labels, predictions):
+                if label == prediction:
+                    correct_pred[classes[label]] += 1
+                total_pred[classes[label]] += 1
+
+    x_axis = x = 0.5 + np.arange(10)
+    y_axix = np.empty(len(classes))
+    i = 0
+    min_correct = [0,110]
+    for classname, correct_count in correct_pred.items():
+        accuracy = 100 * float(correct_count) / total_pred[classname]
+        if min_correct[1] >= int(accuracy):
+            min_correct = [classname, accuracy]
+        #print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
+        y_axix[i] = accuracy
+        i += 1
+    
+    plt.figure(figsize=[12.8, 4.8])
+    plt.bar(x_axis, y_axix, color=colors, width=0.9, tick_label=classes)
+    plt.ylabel("Accuracy")
+    plt.savefig(base_path + f"ex4_figures_FM/{name}_loss_single_class_accuracy.png")
+    plt.clf()
+
+    print("\tMin per-class accuracy is %.4f for class %s\n" %(min_correct[1], min_correct[0]))
+
+    ##----
+
+if not brevitas_model:
+    model_list_2 = [(quant_custom_mini_resnet, 1e-4, 8, 8, 16, "scale"), (quant_custom_mini_resnet, 1e-4, 16, 16, 32, "scale")]
+    #model_list_2 = [(quant_custom_mini_resnet, 1e-4, 4, 4, 8, "scale")]
+    index = 0
+
+    for model_type in model_list:
+        name = model_type[1]
+        print(name, "w/o BN :")
+        folded_model = model_list_2[index][0](model_list_2[index][2], model_list_2[index][3], model_list_2[index][4], model_list_2[index][5])
+        folded_state_dict = torch.load(base_path + "saved_models/exercise4_FashionMNIST.pth")[name]["model_state_dict"][0]
+
+        ### fold and quantize the weights, remove batch norm parameters
+        keys = list(folded_state_dict.keys())
+        for key in keys:
+            m = re.match(r"conv2D_(\d+)\.weight", key)
+            if m is not None:
+                nbr = m.groups()[0]
+                
+                min_v_w = folded_model.min_v_w
+                max_v_w = folded_model.max_v_w
+                min_v_b = folded_model.min_v_b
+                max_v_b = folded_model.max_v_b
+
+                quant_method = folded_model.quant_method
+                weight = folded_state_dict[key]
+                ws = weight.shape[0]
+                bias = folded_state_dict["conv2D_" + nbr + ".bias"]
+                bn_gamma = folded_state_dict["conv2D_" + nbr + ".batch_norm.weight"]
+                bn_beta = folded_state_dict["conv2D_" + nbr + ".batch_norm.bias"]
+                bn_mean = folded_state_dict["conv2D_" + nbr + ".batch_norm.running_mean"]
+                bn_var = folded_state_dict["conv2D_" + nbr + ".batch_norm.running_var"]
+                bn_eps = 1e-5
+                new_weight = weight * bn_gamma.reshape((ws,1,1,1)) / torch.sqrt(bn_var.reshape((ws,1,1,1)) + bn_eps)
+                folded_state_dict[key] = myDoReFaWeightQuantization(new_weight, min_v_w, max_v_w, quant_method)
+                new_bias = ((bias - bn_mean) * bn_gamma / torch.sqrt(bn_var + bn_eps)) + bn_beta
+                folded_state_dict["conv2D_" + nbr + ".bias"] = myDoReFaWeightQuantization(new_bias, min_v_b, max_v_b, quant_method)
+                
+                #remove useless entries
+                folded_state_dict.pop("conv2D_" + nbr + ".batch_norm.weight")
+                folded_state_dict.pop("conv2D_" + nbr + ".batch_norm.bias")
+                folded_state_dict.pop("conv2D_" + nbr + ".batch_norm.running_mean")
+                folded_state_dict.pop("conv2D_" + nbr + ".batch_norm.running_var")
+                folded_state_dict.pop("conv2D_" + nbr + ".batch_norm.num_batches_tracked")
+        
+        folded_model.load_state_dict(folded_state_dict)
+        folded_model.to(device)
+
+        #test accuracy
+        accuracy = test(test_dataloader, folded_model, loss_fn, verbose=False)
+        print("\tTest Accuracy: {:.1f} %".format(accuracy * 100))
+
+        correct_pred = {classname: 0 for classname in classes}
+        total_pred = {classname: 0 for classname in classes}
+
+        with torch.no_grad():
+            for X, y in test_dataloader:
+                images, labels = X.to(device), y.to(device)
+                outputs = folded_model(images)
+                _, predictions = torch.max(outputs, 1)
+                for label, prediction in zip(labels, predictions):
+                    if label == prediction:
+                        correct_pred[classes[label]] += 1
+                    total_pred[classes[label]] += 1
+
+        x_axis = x = 0.5 + np.arange(10)
+        y_axix = np.empty(len(classes))
+        i = 0
+        min_correct = [0,110]
+        for classname, correct_count in correct_pred.items():
+            accuracy = 100 * float(correct_count) / total_pred[classname]
+            if min_correct[1] >= int(accuracy):
+                min_correct = [classname, accuracy]
+            #print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
+            y_axix[i] = accuracy
+            i += 1
+        
+        plt.figure(figsize=[12.8, 4.8])
+        plt.bar(x_axis, y_axix, color=colors, width=0.9, tick_label=classes)
+        plt.ylabel("Accuracy")
+        plt.savefig(base_path + f"ex4_figures_FM/{name}_without_BN_single_class_accuracy.png")
+        plt.clf()
+
+        print("\tMin per-class accuracy is %.4f for class %s\n" %(min_correct[1], min_correct[0]))
 
 """
 In this last exercise you will port the CNN exported with Brevitas to FINN on custom accelerator implemented on a
