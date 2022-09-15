@@ -111,29 +111,31 @@ class Residual33(nn.Module):
 class SeparableConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, padding=(1, 1), halve_resolution=False, bias=True, replicas=1):
         super(SeparableConv2d, self).__init__()
-        self.separable_conv = nn.Sequential()
+        self.separable_conv_list = []
         # first replica is always present
-        self.separable_conv.append(nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=(1, 1),
+        self.separable_conv_list.append(nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=(1, 1),
                                              groups=in_channels, bias=bias, padding=padding))
-        # self.separable_conv.append(nn.BatchNorm2d(num_features=in_channels, momentum=0.01, eps=1e-3))
-        # self.separable_conv.append(nn.ReLU())
-        self.separable_conv.append(nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=bias))
-        self.separable_conv.append(nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3))
+        # self.separable_conv_list.append(nn.BatchNorm2d(num_features=in_channels, momentum=0.01, eps=1e-3))
+        # self.separable_conv_list.append(nn.ReLU())
+        self.separable_conv_list.append(nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=bias))
+        self.separable_conv_list.append(nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3))
         if replicas == 1 and halve_resolution:
-            self.separable_conv.append(nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2)))
+            self.separable_conv_list.append(nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2)))
         if replicas > 1:
-            self.separable_conv.append(nn.ReLU())
+            self.separable_conv_list.append(nn.ReLU())
         for i in range(1, replicas):
-            self.separable_conv.append(nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=(1,1),
+            self.separable_conv_list.append(nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=(1,1),
                                                  groups=out_channels, bias=bias, padding=padding))
-            # self.separable_conv.append(nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3))
-            # self.separable_conv.append(nn.ReLU())
-            self.separable_conv.append(nn.Conv2d(out_channels, out_channels, kernel_size=(1, 1), bias=bias))
-            self.separable_conv.append(nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3))
+            # self.separable_conv_list.append(nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3))
+            # self.separable_conv_list.append(nn.ReLU())
+            self.separable_conv_list.append(nn.Conv2d(out_channels, out_channels, kernel_size=(1, 1), bias=bias))
+            self.separable_conv_list.append(nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3))
             if i < (replicas - 1):
-                self.separable_conv.append(nn.ReLU())
+                self.separable_conv_list.append(nn.ReLU())
             if i == (replicas - 1) and halve_resolution:
-                self.separable_conv.append(nn.MaxPool2d(kernel_size=(2,2), stride=(2,2)))
+                self.separable_conv_list.append(nn.MaxPool2d(kernel_size=(2,2), stride=(2,2)))
+        
+        self.separable_conv = nn.Sequential(*self.separable_conv_list)
 
     def forward(self, x):
         out = self.separable_conv(x)
