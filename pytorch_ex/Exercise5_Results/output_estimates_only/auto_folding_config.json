@@ -1,0 +1,79 @@
+{
+  "Defaults": {},
+  "FMPadding_Batch_0": {
+    "SIMD": 1
+  },
+  "ConvolutionInputGenerator_0": {
+    "SIMD": 1,
+    "ram_style": "distributed"
+  },
+  "StreamingFCLayer_Batch_0": {
+    "PE": 1,
+    "SIMD": 9,
+    "ram_style": "auto",
+    "resType": "lut",
+    "mem_mode": "decoupled",
+    "runtime_writeable_weights": 0
+  },
+  "FMPadding_Batch_1": {
+    "SIMD": 2
+  },
+  "ConvolutionInputGenerator_1": {
+    "SIMD": 16,
+    "ram_style": "distributed"
+  },
+  "StreamingFCLayer_Batch_1": {
+    "PE": 32,
+    "SIMD": 9,
+    "ram_style": "auto",
+    "resType": "lut",
+    "mem_mode": "decoupled",
+    "runtime_writeable_weights": 0
+  },
+  "FMPadding_Batch_2": {
+    "SIMD": 1
+  },
+  "ConvolutionInputGenerator_2": {
+    "SIMD": 8,
+    "ram_style": "distributed"
+  },
+  "StreamingFCLayer_Batch_2": {
+    "PE": 64,
+    "SIMD": 9,
+    "ram_style": "auto",
+    "resType": "lut",
+    "mem_mode": "decoupled",
+    "runtime_writeable_weights": 0
+  },
+  "FMPadding_Batch_3": {
+    "SIMD": 2
+  },
+  "ConvolutionInputGenerator_3": {
+    "SIMD": 4,
+    "ram_style": "distributed"
+  },
+  "StreamingFCLayer_Batch_3": {
+    "PE": 32,
+    "SIMD": 9,
+    "ram_style": "auto",
+    "resType": "lut",
+    "mem_mode": "decoupled",
+    "runtime_writeable_weights": 0
+  },
+  "StreamingFCLayer_Batch_4": {
+    "PE": 1,
+    "SIMD": 8,
+    "ram_style": "auto",
+    "resType": "lut",
+    "mem_mode": "decoupled",
+    "runtime_writeable_weights": 0
+  },
+  "StreamingFCLayer_Batch_5": {
+    "PE": 1,
+    "SIMD": 1,
+    "ram_style": "auto",
+    "resType": "lut",
+    "mem_mode": "decoupled",
+    "runtime_writeable_weights": 0
+  }
+}

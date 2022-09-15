@@ -1,0 +1,14 @@
+[2022-09-14 19:15:19,982] Running step: step_qonnx_to_finn [1/8]
+[2022-09-14 19:15:19,984] Running step: step_tidy_up [2/8]
+[2022-09-14 19:15:20,124] Running step: step_streamline [3/8]
+[2022-09-14 19:15:22,875] /workspace/finn-base/src/finn/transformation/infer_data_layouts.py:119: UserWarning: Assuming 4D input is NCHW
+[2022-09-14 19:15:22,875]   warnings.warn("Assuming 4D input is NCHW")
+[2022-09-14 19:15:22,886] Running step: step_convert_to_hls [4/8]
+[2022-09-14 19:15:23,076] Running step: step_create_dataflow_partition [5/8]
+[2022-09-14 19:15:23,086] Running step: step_target_fps_parallelization [6/8]
+[2022-09-14 19:15:23,091] /workspace/finn/src/finn/transformation/fpgadataflow/set_folding.py:181: UserWarning: SetFolding doesn't know how to handle op_type StreamingMaxPool_Batch
+[2022-09-14 19:15:23,091]   warnings.warn(
+[2022-09-14 19:15:23,106] /workspace/finn/src/finn/transformation/fpgadataflow/set_folding.py:195: UserWarning: Node StreamingFCLayer_Batch_1 is bottleneck with 4096 cycles, running second pass
+[2022-09-14 19:15:23,106]   warnings.warn(
+[2022-09-14 19:15:23,127] Running step: step_apply_folding_config [7/8]
+[2022-09-14 19:15:23,128] Running step: step_generate_estimate_reports [8/8]
