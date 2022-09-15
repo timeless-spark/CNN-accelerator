@@ -10,11 +10,11 @@ from torchvision import datasets
 from torchvision.transforms import transforms
 import numpy as np
 from tqdm import tqdm
-from torch_neural_networks_library import isaResNet_14, isaResNet_38, isaResNet_110, isaResNet_110_normal, isaResNet_110_sparse, isaResNet_110_dropout, isaResNet_290
+from torch_neural_networks_library import isaResNet_14, isaResNet_56, isaResNet_110, isaResNet_110_normal, isaResNet_110_sparse_50, isaResNet_110_sparse_80, isaResNet_110_dropout, isaResNet_290
 from pathlib import Path
 
-base_path = "../../drive/MyDrive/"
-#base_path = "./"
+#base_path = "../../drive/MyDrive/"
+base_path = "./"
 
 Path(base_path + "saved_models").mkdir(parents=True, exist_ok=True)
 
@@ -31,7 +31,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 #device = "cpu"
 
-model_list = [isaResNet_110, isaResNet_110_normal, isaResNet_110_sparse, isaResNet_110_dropout]
+model_list = [isaResNet_110, isaResNet_110_normal, isaResNet_110_sparse_50, isaResNet_110_sparse_80, isaResNet_110_dropout]
 
 def return_model_params(model):
     '''
@@ -86,7 +86,7 @@ def train(dataloader, model, loss_fn, optimizer, loss_list):
             loss_list.append(loss / 100)
     return loss
 
-def test(dataloader, model, loss_fn, loss_list=None):
+def test(dataloader, model, loss_fn, loss_list=None, verbose=True):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
@@ -101,7 +101,8 @@ def test(dataloader, model, loss_fn, loss_list=None):
     correct /= size
     if loss_list is not None:
         loss_list.append(test_loss)
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f}")
+    if verbose:
+        print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f}")
     return correct
 
 ###training parameters (according to the paper..)
@@ -128,7 +129,7 @@ if initialize_dict:
         params = return_model_params(model)
         optimizer = torch.optim.SGD(params, weight_decay=wd, momentum=0.9, lr=lr)
         #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, threshold=1e-4, threshold_mode='abs', verbose=True)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40,60], gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80,120], gamma=0.1)
         tr_dict[name] = {
             "model_state_dict": [model.state_dict(), 0],
             "learnable_params": sum(torch.numel(p) for p in return_model_params(model)),
@@ -173,7 +174,7 @@ for func in model_list:
             if current_acc > best_acc:
                 best_acc = current_acc
                 tr_dict[name]["model_state_dict"] = [model.state_dict(), best_acc]
-            torch.save(tr_dict, base_path + "saved_models/exercise3.pth")
+            torch.save(tr_dict, base_path + "saved_models/exercise3_bis.pth")
             print(f"lr: {optimizer.param_groups[0]['lr']:0.2e}\n")
 
 ###-----
@@ -183,13 +184,20 @@ import matplotlib
 matplotlib.use("TKAgg")
 import matplotlib.pyplot as plt
 
-tr_dict = torch.load(base_path + "saved_models/exercise3.pth", map_location=torch.device('cpu'))
+tr_dict = torch.load(base_path + "saved_models/exercise3_bis.pth", map_location=torch.device('cpu'))
+
+model_list = [(isaResNet_110, "isaResNet_110_downsample_loss"), (isaResNet_56, "isaResNet_56_downsample_loss"), (isaResNet_290, "isaResNet_290_downsample_loss")]
 
 classes = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 colors = ['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:pink','tab:grey','tab:olive','tab:cyan']
 
-for func in range(1):
-    model, name = model_list[0]()
+Path(base_path + "ex3bis_figures").mkdir(parents=True, exist_ok=True)
+
+for func in model_list:
+    (model, _), name = func[0](), func[1]
+    print(name, ":")
+    print("\tLearnable parameters: {:d}".format(tr_dict[name]["learnable_params"]))
+    print("\tValidation Accuracy: {:.1f} %".format(tr_dict[name]["model_state_dict"][1] * 100))
     model.load_state_dict(tr_dict[name]["model_state_dict"][0])
     model.to(device)
 
@@ -198,28 +206,30 @@ for func in range(1):
     n_ele = len(tr_dict[name]["training_loss"])
     n_epoch = tr_dict[name]["epoch_done"]
     start = n_epoch / n_ele
-    x_axis = np.linspace(start, n_epoch, n_ele)
-    y_axix = np.empty_like(x_axis)
+    tr_x_axis = np.linspace(start, n_epoch, n_ele)
+    tr_y_axix = np.empty_like(tr_x_axis)
     i = 0
     for val in tr_dict[name]["training_loss"]:
-        y_axix[i] = val
+        tr_y_axix[i] = val * 100
         i += 1
-
-    plt.plot(x_axis, y_axix, linewidth=2.0)
-
-    plt.show()
 
     #validation loss during training
-    x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
-    y_axix = np.empty_like(x_axis)
+    val_x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
+    val_y_axix = np.empty_like(val_x_axis)
     i = 0
     for val in tr_dict[name]["validation_loss"]:
-        y_axix[i] = val
+        val_y_axix[i] = val
         i += 1
 
-    plt.plot(x_axis, y_axix, linewidth=2.0)
-
-    plt.show()
+    plt.figure(figsize=[6.4, 4.8])
+    plt.plot(tr_x_axis, tr_y_axix, linewidth=2.0, label="Training loss")
+    plt.plot(val_x_axis, val_y_axix, linewidth=3.0, label="Validation loss")
+    plt.ylim(top=3)
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend(["Training loss", "Validation loss"])
+    plt.savefig(base_path + f"ex3bis_figures/{name}_training_loss.png")
+    plt.clf()
 
     #validation accuracy during training
     x_axis = np.linspace(1, tr_dict[name]["epoch_done"], tr_dict[name]["epoch_done"])
@@ -229,13 +239,16 @@ for func in range(1):
         y_axix[i] = val
         i += 1
     
-    plt.plot(x_axis, y_axix, linewidth=2.0)
+    plt.plot(x_axis, y_axix, linewidth=3.0)
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.legend(["Validation accuracy"])
+    plt.savefig(base_path + f"ex3bis_figures/{name}_validation_accuracy.png")
+    plt.clf()
 
-    plt.show()
-    
     #test accuracy
-    accuracy = test(test_dataloader, model, loss_fn)
-    print("Test Accuracy for {:s} is: {:.1f} %".format(name, accuracy * 100))
+    accuracy = test(test_dataloader, model, loss_fn, verbose=False)
+    print("\tTest Accuracy: {:.1f} %".format(accuracy * 100))
 
     correct_pred = {classname: 0 for classname in classes}
     total_pred = {classname: 0 for classname in classes}
@@ -250,20 +263,22 @@ for func in range(1):
                     correct_pred[classes[label]] += 1
                 total_pred[classes[label]] += 1
 
-    x_axis = 0.5 + np.arange(len(classes))
-    y_axix = np.empty_like(x_axis)
+    x_axis = x = 0.5 + np.arange(10)
+    y_axix = np.empty(len(classes))
     i = 0
     min_correct = [0,110]
     for classname, correct_count in correct_pred.items():
         accuracy = 100 * float(correct_count) / total_pred[classname]
         if min_correct[1] >= int(accuracy):
             min_correct = [classname, accuracy]
-        print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
+        #print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
         y_axix[i] = accuracy
         i += 1
     
-    plt.bar(classes, y_axix, color=colors)
+    plt.figure(figsize=[12.8, 4.8])
+    plt.bar(x_axis, y_axix, color=colors, width=0.9, tick_label=classes)
+    plt.ylabel("Accuracy")
+    plt.savefig(base_path + f"ex3bis_figures/{name}_single_class_accuracy.png")
+    plt.clf()
 
-    plt.show()
-
-    print("Worst class accuracy is %.4f for class %s" %(min_correct[1], min_correct[0]))
+    print("\tMin per-class accuracy is %.4f for class %s\n" %(min_correct[1], min_correct[0]))
